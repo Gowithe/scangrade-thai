@@ -17,6 +17,8 @@ import db
 import utils
 import omr60
 import omr80
+import sys
+print("[RUNTIME] python =", sys.version)
 
 load_dotenv()
 
@@ -1050,3 +1052,4 @@ def next_sheet():
 if __name__ == "__main__":
     # Production: รันด้วย gunicorn แทน (เช่น gunicorn app:app)
     app.run(host="0.0.0.0", port=5000, debug=False)
+
