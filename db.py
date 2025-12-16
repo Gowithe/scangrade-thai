@@ -2,7 +2,8 @@
 import sqlite3
 from datetime import datetime
 
-DB_PATH = "scangrade.db"
+import os
+DB_PATH = os.getenv("DB_PATH", "/var/data/scangrade.db")
 
 # =========================
 # PACKAGES
@@ -308,3 +309,4 @@ def list_saved_subjects(username, num_questions):
     """, (username, num_questions)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
