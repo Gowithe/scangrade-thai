@@ -240,12 +240,10 @@
           </div>
 
           <div class="btnrow">
-            <!-- เปิดดูภาพเต็มจอ -->
             <a class="btn" href="{{ QR_URL }}" target="_blank" rel="noopener">
               🔍 เปิด QR เต็มจอ
             </a>
 
-            <!-- ดาวน์โหลดไฟล์ -->
             <a class="btn btn-primary" href="{{ QR_URL }}" download="promptpay-qr.jpg">
               ⬇️ ดาวน์โหลด QR
             </a>
@@ -309,15 +307,26 @@
   </div>
 
   <script>
-    // กันกดซ้ำ
-    const form = document.getElementById("buyForm");
-    const btn = document.getElementById("submitBtn");
-    if (form && btn) {
+    // ✅ กันกดซ้ำ (ชัวร์): lock submit + disable submit ทั้งฟอร์ม
+    (function(){
+      const form = document.getElementById("buyForm");
+      if (!form) return;
+
+      let submitted = false;
+
       form.addEventListener("submit", () => {
-        btn.disabled = true;
-        btn.textContent = "กำลังตรวจสลิป...";
+        if (submitted) return;
+        submitted = true;
+
+        const submits = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+        submits.forEach(btn => {
+          btn.disabled = true;
+        });
+
+        const mainBtn = document.getElementById("submitBtn");
+        if (mainBtn) mainBtn.textContent = "⏳ กำลังตรวจสลิป...";
       });
-    }
+    })();
   </script>
 </body>
 </html>
