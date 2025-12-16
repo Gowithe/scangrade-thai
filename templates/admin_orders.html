@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>Admin - คำขอเติมเครดิต</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Sarabun', sans-serif; background:#0f172a; color:#e5e7eb; margin:0; padding:16px; }
+    h1 { color:#38bdf8; text-align:center; }
+    table { width:100%; max-width:900px; margin:20px auto; border-collapse:collapse; background:#1e293b; border-radius:12px; overflow:hidden; }
+    th, td { padding:12px; text-align:left; border-bottom:1px solid #334155; }
+    th { background:#0f172a; color:#94a3b8; }
+    tr:hover { background:#334155; }
+    a { color:#38bdf8; text-decoration:none; }
+    .badge { padding:4px 8px; border-radius:99px; font-size:0.75rem; font-weight:700; }
+    .pending { background:#f59e0b; color:#000; }
+    .approved { background:#10b981; color:#fff; }
+    .btn-approve { background:#10b981; color:#fff; padding:6px 12px; border-radius:6px; font-size:0.8rem; }
+  </style>
+</head>
+<body>
+  <h1>รายการคำขอเติมเครดิต</h1>
+  <table>
+    <tr>
+      <th>ID</th><th>User</th><th>Pack</th><th>Price</th><th>Slip</th><th>Status</th><th>Action</th>
+    </tr>
+    {% for o in orders %}
+    <tr>
+      <td>#{{ o.id }}</td>
+      <td>{{ o.username }}</td>
+      <td>{{ o.credits }}</td>
+      <td>{{ o.amount }}</td>
+      <td>{% if o.slip_filename %}<a href="/slips/{{ o.slip_filename }}" target="_blank">View</a>{% endif %}</td>
+      <td>
+        <span class="badge {{ 'pending' if o.status == 'pending' else 'approved' }}">
+          {{ o.status }}
+        </span>
+      </td>
+      <td>
+        {% if o.status == 'pending' %}
+          <a href="/admin/approve/{{ o.id }}?key={{ admin_key }}" class="btn-approve">Approve</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</body>
+</html>

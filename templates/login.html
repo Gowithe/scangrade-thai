@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>เข้าสู่ระบบ | ScanGrade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #38bdf8;
+      --success: #10b981;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --muted: #94a3b8;
+      --text: #f1f5f9;
+      --input-bg: rgba(15, 23, 42, 0.6);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Sarabun', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 460px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .app-title {
+      font-size: 2.2rem;
+      font-weight: 800;
+      margin: 0;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .app-subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: 4px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 30px 24px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+      background: rgba(15, 23, 42, 0.8);
+    }
+
+    button {
+      width: 100%;
+      margin-top: 20px;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+    }
+    button:active { transform: scale(0.98); }
+    button:hover { box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4); }
+
+    .info-box {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 16px;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .info-box h2, .info-box h3 {
+      margin: 0 0 8px 0;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .info-box ol, .info-box ul {
+      margin: 0;
+      padding-left: 20px;
+      color: #cbd5e1;
+    }
+    .info-box li { margin-bottom: 4px; }
+
+    .box-howto {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+    .box-howto h2 { color: #93c5fd; }
+
+    .box-tips {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      margin-top: 12px;
+    }
+    .box-tips h3 { color: #6ee7b7; }
+
+    .video-link {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+      transition: transform 0.2s;
+    }
+    .video-link:active { transform: scale(0.98); }
+
+    .error-msg {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 24px;
+      opacity: 0.7;
+    }
+    
+    .user-loggedin {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--card-border);
+      padding: 12px;
+      border-radius: 12px;
+      text-align: center;
+      margin-bottom: 16px;
+      font-size: 0.9rem;
+    }
+    .user-loggedin a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+    code {
+      background: rgba(0,0,0,0.3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="app-title">ScanGrade</h1>
+      <div class="app-subtitle">ตรวจข้อสอบอัตโนมัติด้วยรูปถ่าย</div>
+    </div>
+    <div class="card">
+      {% if current_user %}
+        <div class="user-loggedin">
+          🔒 กำลังล็อกอินชื่อ: <b>{{ current_user }}</b><br>
+          <span style="font-size:0.85rem; color:var(--muted)">เครดิตคงเหลือ: {{ current_credits }}</span><br>
+          <a href="/logout">ออกจากระบบ</a>
+        </div>
+      {% endif %}
+      <form method="post">
+        <label>📧 อีเมลสำหรับรับรหัส OTP</label>
+        <input type="text" name="identifier" placeholder="เช่น teacher@school.com" inputmode="email" autocomplete="email" autofocus>
+        {% if error %}
+          <div class="error-msg" style="margin-top:12px;">⚠️ {{ error }}</div>
+        {% endif %}
+        <button type="submit">ขอรหัส OTP 🚀</button>
+      </form>
+      <div class="info-box box-howto">
+        <h2>⚡ วิธีเข้าใช้งาน (สั้น ๆ)</h2>
+        <ol>
+          <li>กรอกอีเมล → กด <b>ขอรหัส OTP</b></li>
+          <li>เปิดอีเมล หา “ScanGrade” นำรหัส 6 หลักมากรอก</li>
+          <li>เข้าสู่หน้าอัปโหลด → กรอกเฉลย → เลือกโหมดตรวจ</li>
+        </ol>
+      </div>
+      <div class="info-box box-tips">
+        <h3>✅ ถ่ายรูปอย่างไรให้แม่น?</h3>
+        <ul>
+          <li>ถ่ายให้เห็นกระดาษ <b>เต็มแผ่น</b> ไม่เอียงมาก</li>
+          <li><b>พื้นหลังเข้ม</b> ตัดกับกระดาษ (เช่น โต๊ะไม้/ดำ)</li>
+          <li>แสงสว่างเพียงพอ ไม่ให้มีเงาบังกระดาษ</li>
+        </ul>
+      </div>
+      <a href="https://youtu.be/V0g71eBvweg?si=3-1axB3_IZrP5N7X" target="_blank" class="video-link">
+        <span>▶️</span> ดูวิดีโอสอนใช้งาน (1 นาที)
+      </a>
+      <div class="footer-note">
+        1 อีเมล = <b>สิทธิ์ทดลองใช้ฟรี 20 ครั้ง</b><br>
+        (ระบบแจก 1 ครั้งต่อ 1 อุปกรณ์)<br><br>
+        หากไม่ได้รับอีเมล โปรดตรวจสอบใน <b>Junk / Spam</b>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+

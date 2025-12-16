@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>เติมเครดิต (EasySlip) | ScanGrade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --card: rgba(30,41,59,.78);
+      --border: rgba(255,255,255,.10);
+      --muted:#94a3b8;
+      --text:#e5e7eb;
+      --accent:#38bdf8;
+      --success:#10b981;
+      --warn:#f59e0b;
+      --danger:#ef4444;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0; padding:18px;
+      font-family:'Sarabun',system-ui,-apple-system,sans-serif;
+      background:
+        radial-gradient(at 0% 0%, rgba(56,189,248,.18), transparent 55%),
+        radial-gradient(at 100% 100%, rgba(16,185,129,.12), transparent 55%),
+        var(--bg);
+      color:var(--text);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .wrap{ width:100%; max-width:560px; }
+    .title{
+      text-align:center;
+      font-weight:800;
+      font-size:1.9rem;
+      margin:0 0 6px;
+      background: linear-gradient(90deg, #facc15, #f59e0b);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+    }
+    .subtitle{
+      text-align:center;
+      color:var(--muted);
+      line-height:1.55;
+      margin:0 0 16px;
+      font-size:.95rem;
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:24px;
+      padding:18px;
+      box-shadow:0 20px 40px rgba(0,0,0,.35);
+      backdrop-filter: blur(16px);
+    }
+    .userbox{
+      text-align:center;
+      padding:12px 14px;
+      border:1px solid var(--border);
+      border-radius:16px;
+      background: rgba(255,255,255,.03);
+      margin-bottom:14px;
+      line-height:1.6;
+    }
+    .credits{ color:var(--success); font-weight:800; font-size:1.05rem; }
+    .section{
+      margin-top:14px;
+      border-top:1px solid rgba(255,255,255,.08);
+      padding-top:14px;
+    }
+    .section-title{
+      font-weight:800;
+      color:var(--muted);
+      margin:0 0 10px;
+      display:flex; align-items:center; gap:8px;
+    }
+
+    /* QR */
+    .qrbox{
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px;
+      background: rgba(255,255,255,.03);
+    }
+    .qrrow{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .qrimg{
+      width:170px;
+      height:170px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background:#fff;
+      object-fit:contain;
+    }
+    .qrinfo{
+      flex:1;
+      min-width:220px;
+      color:var(--muted);
+      line-height:1.55;
+      font-size:.95rem;
+    }
+    .btnrow{
+      display:flex;
+      gap:10px;
+      margin-top:12px;
+      flex-wrap:wrap;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:12px 12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      text-decoration:none;
+      font-weight:800;
+      cursor:pointer;
+      flex:1;
+      min-width:180px;
+    }
+    .btn:hover{ border-color: var(--accent); }
+    .btn-primary{
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border:none;
+      box-shadow:0 6px 18px rgba(245,158,11,.25);
+      color:#111827;
+    }
+    .btn-danger{
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      border:none;
+      box-shadow:0 6px 18px rgba(239,68,68,.25);
+      color:white;
+    }
+    .btn:disabled{
+      opacity:.6;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
+
+    /* Packages */
+    .pkg{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      padding:12px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,.03);
+      cursor:pointer;
+      transition:.15s;
+      margin-bottom:10px;
+    }
+    .pkg:hover{ border-color: var(--accent); background: rgba(255,255,255,.06); }
+    input[type=radio]{ accent-color: var(--accent); transform:scale(1.12); margin-top:2px; }
+    .pkg-title{ font-weight:900; color: var(--accent); }
+    .pkg-sub{ color:var(--muted); margin-top:2px; }
+
+    /* Upload slip */
+    .filebox{
+      border:1px dashed rgba(255,255,255,.18);
+      border-radius:14px;
+      padding:12px;
+      background: rgba(255,255,255,.02);
+    }
+    .hint{
+      margin-top:10px;
+      padding:12px 14px;
+      border-radius:14px;
+      border:1px solid rgba(245,158,11,.35);
+      background: rgba(245,158,11,.10);
+      color:#fde68a;
+      line-height:1.55;
+      font-size:.92rem;
+    }
+    .warn{
+      margin-top:10px;
+      padding:12px 14px;
+      border-radius:14px;
+      border:1px solid rgba(239,68,68,.35);
+      background: rgba(239,68,68,.10);
+      color:#fecaca;
+      line-height:1.55;
+      font-size:.92rem;
+    }
+
+    .back{
+      display:block;
+      margin-top:14px;
+      text-align:center;
+      color:var(--muted);
+      text-decoration:none;
+    }
+    .back:hover{ color:var(--text); }
+    .tiny{ text-align:center; color:var(--muted); font-size:.85rem; margin-top:8px; }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1 class="title">เติมเครดิต (EasySlip)</h1>
+    <p class="subtitle">
+      โอนเงินตามแพ็กเกจ → อัปโหลดสลิป → ระบบตรวจและเติมเครดิตอัตโนมัติ<br>
+      (ยอดต้องตรงแพ็ก และสลิปต้องไม่ซ้ำ)
+    </p>
+
+    <div class="card">
+      <div class="userbox">
+        ผู้ใช้: <b>{{ username }}</b><br>
+        เครดิตคงเหลือ: <span class="credits">{{ credits }}</span> ครั้ง
+      </div>
+
+      <!-- ========== QR โอนเงิน ========== -->
+      <div class="section">
+        <div class="section-title">💸 โอนเงินด้วย QR</div>
+
+        {% set QR_URL = url_for('static', filename='promptpay.jpg') %}
+
+        <div class="qrbox">
+          <div class="qrrow">
+            <img class="qrimg" src="{{ QR_URL }}" alt="PromptPay QR">
+
+            <div class="qrinfo">
+              1) กด “เปิด QR เต็มจอ” หรือ “ดาวน์โหลด QR”<br>
+              2) ไปที่แอปธนาคาร → สแกน / เลือกรูป QR จากอัลบั้ม<br>
+              3) โอนตามยอดแพ็กเกจ แล้วกลับมาอัปโหลดสลิปด้านล่าง
+              <div class="tiny" style="text-align:left;margin-top:8px;">
+            </div>
+          </div>
+
+          <div class="btnrow">
+            <!-- เปิดดูภาพเต็มจอ -->
+            <a class="btn" href="{{ QR_URL }}" target="_blank" rel="noopener">
+              🔍 เปิด QR เต็มจอ
+            </a>
+
+            <!-- ดาวน์โหลดไฟล์ -->
+            <a class="btn btn-primary" href="{{ QR_URL }}" download="promptpay-qr.jpg">
+              ⬇️ ดาวน์โหลด QR
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== Form อัปโหลดสลิป ========== -->
+      <form method="post" action="/buy" enctype="multipart/form-data" id="buyForm">
+        <div class="section">
+          <div class="section-title">📦 เลือกแพ็กเกจ</div>
+
+          {% for key, pkg in packages.items() %}
+          <label class="pkg">
+            <input type="radio" name="package" value="{{ key }}" {% if key == "TEST" %}checked{% endif %}>
+            <div>
+              <div class="pkg-title">
+                {% if key == "TEST" %} ทดสอบระบบ
+                {% elif key == "100" %} 100 ครั้ง
+                {% elif key == "500" %} 500 ครั้ง
+                {% elif key == "1000" %} 1,000 ครั้ง
+                {% else %} {{ key }}
+                {% endif %}
+              </div>
+              <div class="pkg-sub">
+                ราคา <b>{{ pkg.price }}</b> บาท • ได้เครดิต <b>{{ pkg.credits }}</b> ครั้ง
+              </div>
+            </div>
+          </label>
+          {% endfor %}
+
+          <div class="section-title" style="margin-top:12px;">🧾 อัปโหลดสลิป</div>
+          <div class="filebox">
+            <input type="file" name="slip" accept="image/*" required>
+            <div class="tiny" style="text-align:left;margin-top:8px;">
+              แนะนำ: แคปหน้าจอสลิปจากแอปธนาคาร แล้วอัปโหลด (JPG/PNG)
+            </div>
+          </div>
+
+          <div class="hint">
+            ✅ ขั้นตอน: โอนเงิน → อัปโหลดสลิป → กด “ยืนยันการชำระเงิน”<br>
+            ⏱ ระบบจะตรวจสลิปและเติมเครดิตให้อัตโนมัติ (อาจใช้เวลาไม่กี่วินาที)
+          </div>
+
+          <div class="warn">
+            ⚠️ เงื่อนไข: ยอดเงินต้องตรงแพ็กเกจ และสลิปต้องไม่ซ้ำ (ใช้ transRef กันซ้ำ)
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submitBtn" style="width:100%; margin-top:12px;">
+            ✅ ยืนยันการชำระเงิน (ตรวจสลิป)
+          </button>
+
+          <div class="tiny">
+            หากอัปโหลดแล้วไม่ผ่าน ให้ตรวจยอดเงิน/ความชัดของรูป แล้วลองใหม่
+          </div>
+        </div>
+      </form>
+
+      <a href="/" class="back">⬅ กลับหน้าหลัก</a>
+    </div>
+  </div>
+
+  <script>
+    // กันกดซ้ำ
+    const form = document.getElementById("buyForm");
+    const btn = document.getElementById("submitBtn");
+    if (form && btn) {
+      form.addEventListener("submit", () => {
+        btn.disabled = true;
+        btn.textContent = "กำลังตรวจสลิป...";
+      });
+    }
+  </script>
+</body>
+</html>

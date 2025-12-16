@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>ผลการตรวจข้อสอบ | ScanGrade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #38bdf8;
+      --success: #10b981;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --muted: #94a3b8;
+      --text: #f1f5f9;
+    }
+
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      font-family: 'Sarabun', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 800;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .user-info {
+      font-size: 0.9rem;
+      color: var(--muted);
+      text-align: right;
+    }
+    .user-info span { color: var(--text); font-weight: 600; }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .header { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .user-info { text-align: left; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .summary-card {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .score-box {
+      text-align: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 16px;
+      border: 1px solid var(--card-border);
+    }
+    .score-label { font-size: 0.9rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .score-big {
+      font-size: 4rem;
+      font-weight: 800;
+      line-height: 1;
+      margin: 10px 0;
+      color: var(--text);
+      text-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+    }
+    .score-fraction { font-size: 1.1rem; color: var(--accent); font-weight: 600; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .stat-item {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 12px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    .stat-val { font-size: 1.4rem; font-weight: 700; display: block; }
+    .stat-name { font-size: 0.8rem; color: var(--muted); }
+    
+    .c-green { color: var(--success); }
+    .c-red { color: var(--error); }
+    .c-orange { color: var(--warning); }
+    .c-gray { color: var(--muted); }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      text-align: center;
+      font-size: 0.95rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4); }
+    
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      border: 1px solid var(--card-border);
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+
+    .debug-area {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--card-border);
+    }
+    .debug-img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      opacity: 0.8;
+      transition: opacity 0.3s;
+    }
+    .debug-img:hover { opacity: 1; }
+
+    .table-container {
+      overflow-x: auto;
+    }
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .table-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+    
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 0.95rem;
+    }
+    th {
+      text-align: center;
+      padding: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(15, 23, 42, 0.5);
+      position: sticky;
+      top: 0;
+      backdrop-filter: blur(5px);
+    }
+    td {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      color: var(--text);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    .ans-badge {
+      display: inline-block;
+      min-width: 30px;
+      font-weight: 700;
+    }
+    .ans-correct { color: var(--success); }
+    .ans-wrong { color: var(--error); opacity: 0.8; text-decoration: line-through; }
+    .ans-key { color: var(--accent); }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 99px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .st-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
+    .st-bad { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+    .st-multi { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.2); }
+    .st-blank { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+    
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    
+  </style>
+</head>
+<body>
+<div class="container">
+  <header class="header">
+    <div>
+      <h1>ScanGrade Result</h1>
+    </div>
+    <div class="user-info">
+      ผู้ใช้: <span>{{ username }}</span> | เครดิต: <span>{{ credits }}</span>
+    </div>
+  </header>
+  <div class="dashboard-grid">
+    <aside class="summary-card card">
+      <div class="score-box">
+        <div class="score-label">คะแนนรวม</div>
+        {% set pct = (stats.correct / stats.total * 100)|round|int %}
+        <div class="score-big">{{ pct }}%</div>
+        <div class="score-fraction">{{ stats.correct }} / {{ stats.total }} คะแนน</div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-val c-green">{{ stats.correct }}</span>
+          <span class="stat-name">ถูก</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val c-red">{{ stats.wrong }}</span>
+          <span class="stat-name">ผิด</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val c-gray">{{ stats.blank }}</span>
+          <span class="stat-name">เว้น</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val c-orange">{{ stats.multi }}</span>
+          <span class="stat-name">ซ้ำ</span>
+        </div>
+      </div>
+      <div class="actions">
+        <form method="post" action="/next" style="display:contents;">
+          <input type="hidden" name="num_questions" value="{{ num_questions }}">
+          <input type="hidden" name="answer_key" value="{{ answer_key_str_raw }}">
+          <button type="submit" class="btn btn-primary">
+            <span>📄</span> ตรวจแผ่นต่อไป
+          </button>
+        </form>
+        <a href="/" class="btn btn-secondary">
+          <span>🏠</span> กลับหน้าแรก
+        </a>
+      </div>
+      {% if debug_image %}
+      <div class="debug-area">
+        <div class="score-label" style="margin-bottom:8px;">AI Debug View</div>
+        <img class="debug-img" src="data:image/jpeg;base64,{{ debug_image }}" onclick="this.requestFullscreen()">
+      </div>
+      {% endif %}
+    </aside>
+    <main class="card" style="padding:0;">
+      <div style="padding:20px 20px 10px 20px;" class="table-header">
+        <div class="table-title">รายละเอียดรายข้อ</div>
+        <div class="score-label">{{ num_questions }} ข้อ</div>
+      </div>
+      <div class="table-container" style="max-height: 600px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th width="15%">ข้อ</th>
+              <th width="25%">ตอบ</th>
+              <th width="25%">เฉลย</th>
+              <th width="35%">สถานะ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for q in range(1, num_questions+1) %}
+              {% set st = detail[q][0] if q in detail else '-' %}
+              {% set user_ans = answers[q] if answers[q] else '-' %}
+              {% set key_ans = answer_key.get(q, '-') %}
+              {% if st in ['ถูก','ถูกต้อง','correct','✔'] %}
+                {% set pill_cls = 'st-ok' %}
+                {% set pill_txt = 'ถูกต้อง' %}
+              {% elif st in ['ผิด','wrong','✘','x','X'] %}
+                {% set pill_cls = 'st-bad' %}
+                {% set pill_txt = 'ผิด' %}
+              {% elif st in ['M','MULTI','multi','หลายตัว'] %}
+                {% set pill_cls = 'st-multi' %}
+                {% set pill_txt = 'ฝนเกิน' %}
+              {% else %}
+                {% set pill_cls = 'st-blank' %}
+                {% set pill_txt = 'เว้นว่าง' %}
+              {% endif %}
+              <tr>
+                <td><span style="color:var(--muted); font-weight:600;">{{ q }}</span></td>
+                <td>
+                  <span class="ans-badge {% if st in ['correct','ถูก','✔'] %}ans-correct{% else %}ans-wrong{% endif %}">
+                    {{ user_ans }}
+                  </span>
+                </td>
+                <td>
+                  <span class="ans-badge ans-key">{{ key_ans }}</span>
+                </td>
+                <td>
+                  <span class="status-pill {{ pill_cls }}">
+                    <span class="dot"></span> {{ pill_txt }}
+                  </span>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

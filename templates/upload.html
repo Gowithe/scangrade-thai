@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>ScanGrade - ตรวจข้อสอบอัตโนมัติ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #38bdf8;
+      --success: #10b981;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --muted: #94a3b8;
+      --text: #f1f5f9;
+      --input-bg: rgba(15, 23, 42, 0.6);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Sarabun', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-dark);
+      background-image:
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    .container { max-width: 600px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 20px; }
+
+    .app-title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin: 0;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 6px 16px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 99px;
+      border: 1px solid var(--card-border);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .credit-count { color: var(--accent); font-weight: 700; font-size: 1rem; }
+    .credit-low { color: var(--warning); }
+
+    .top-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-small {
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 6px 12px;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .btn-buy {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: white;
+      font-weight: 600;
+      box-shadow: 0 4px 10px rgba(245, 158, 11, 0.2);
+    }
+    .btn-logout {
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--card-border);
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+    }
+
+    .section-label {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .file-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .btn-file {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 20px 10px;
+      border-radius: 16px;
+      border: 1px solid var(--card-border);
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+    }
+    .btn-file:active { transform: scale(0.98); }
+    .btn-file.camera { background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(249, 115, 22, 0.05)); border-color: rgba(249, 115, 22, 0.3); }
+    .btn-file.gallery { background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.05)); border-color: rgba(99, 102, 241, 0.3); }
+
+    .icon-big { font-size: 1.8rem; }
+    .btn-text { font-size: 0.95rem; font-weight: 600; }
+
+    .file-name {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--accent);
+      margin-bottom: 20px;
+      min-height: 1.2em;
+    }
+
+    .toggle-group {
+      display: flex;
+      background: var(--input-bg);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      margin-bottom: 20px;
+    }
+    .btn-questions {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .btn-questions.active {
+      background: var(--accent);
+      color: #0f172a;
+      box-shadow: 0 2px 8px rgba(56, 189, 248, 0.4);
+    }
+
+    input[type="text"], select {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: var(--input-bg);
+      color: var(--text);
+      font-family: 'Sarabun', system-ui, -apple-system, sans-serif;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    select { cursor: pointer; }
+
+    #answerKeyInput{
+      font-family: 'Courier New', monospace;
+      letter-spacing: 2px;
+    }
+
+    input[type="text"]:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+    input::placeholder { color: rgba(148, 163, 184, 0.4); letter-spacing: 0; font-family: 'Sarabun', sans-serif;}
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .btn-save {
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(16,185,129,0.12);
+      color: var(--success);
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .btn-save:active { transform: scale(0.98); }
+
+    .hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 6px;
+      opacity: 0.9;
+    }
+
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 8px 0 6px 0;
+    }
+    .preview-box {
+      background: var(--input-bg);
+      border: 1px dashed var(--card-border);
+      border-radius: 12px;
+      padding: 10px;
+      max-height: 140px;
+      overflow-y: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 24px;
+    }
+
+    .answer-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 28px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid var(--card-border);
+      background: rgba(255,255,255,0.02);
+      color: var(--muted);
+    }
+    .answer-item-filled {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+    }
+
+    .action-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .btn-main {
+      padding: 16px;
+      border-radius: 14px;
+      border: none;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      color: white;
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-main:active { transform: scale(0.96); }
+
+    .btn-auto {
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25);
+    }
+    .btn-manual {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.25);
+    }
+
+    .note {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 20px;
+      opacity: 0.7;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      font-size: 0.9rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s, transform 0.25s;
+      z-index: 9999;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+    /* ✅ Warp Fail Modal */
+    .modal-backdrop{
+      display:none;
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,0.55);
+      z-index: 10000;
+      padding:16px;
+    }
+    .modal-card{
+      max-width: 520px;
+      margin: 12vh auto;
+      background: rgba(30,41,59,0.95);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.35);
+    }
+    .modal-title{
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #fca5a5;
+      margin-bottom: 10px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .modal-body{
+      color: #e5e7eb;
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+    .modal-actions{
+      display:flex;
+      gap:10px;
+      margin-top: 14px;
+    }
+    .btn-modal{
+      flex:1;
+      padding: 12px;
+      border-radius: 12px;
+      font-weight: 800;
+      cursor:pointer;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(148,163,184,0.12);
+      color: #e5e7eb;
+    }
+    .btn-modal-primary{
+      border:none;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color:white;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="app-title">ScanGrade</h1>
+      <div class="user-badge">
+        <span>👤 {{ username }}</span>
+        <span style="opacity:0.3">|</span>
+        <span>เครดิต: <span class="credit-count {{ 'credit-low' if credits <= 5 else '' }}">{{ credits }}</span></span>
+      </div>
+      <div class="top-actions">
+        <a href="/buy" class="btn-small btn-buy">⚡ เติมเครดิต</a>
+        <a href="/logout" class="btn-small btn-logout">ออกจากระบบ</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <form method="post" enctype="multipart/form-data">
+        <input type="file" id="fileInput" name="sheet" accept="image/*" style="display:none;" required>
+
+        <div class="section-label">📷 1. เลือกรูปกระดาษคำตอบ</div>
+        <div class="file-group">
+          <button type="button" class="btn-file camera" id="btnCamera">
+            <span class="icon-big">📸</span>
+            <span class="btn-text">ถ่ายรูป</span>
+          </button>
+          <button type="button" class="btn-file gallery" id="btnGallery">
+            <span class="icon-big">🖼️</span>
+            <span class="btn-text">อัลบั้ม</span>
+          </button>
+        </div>
+        <div id="fileName" class="file-name">ยังไม่ได้เลือกรูป</div>
+
+        <div class="section-label">📄 2. จำนวนข้อ</div>
+        <div class="toggle-group">
+          <button type="button" class="btn-questions {% if num_questions|default(60) == 60 %}active{% endif %}" id="btnQ60">แบบ 60 ข้อ</button>
+          <button type="button" class="btn-questions {% if num_questions|default(60) == 80 %}active{% endif %}" id="btnQ80">แบบ 80 ข้อ</button>
+        </div>
+        <input type="hidden" name="num_questions" id="numQuestionsInput" value="{{ num_questions|default(60) }}">
+
+        <!-- ✅ Subject + Saved keys -->
+        <div class="section-label">📚 3. วิชา / ชุดข้อสอบ (บันทึกเฉลยได้)</div>
+
+        <div class="row-2">
+          <input
+            type="text"
+            id="subjectInput"
+            name="subject"
+            placeholder="เช่น ENG M.1 Midterm"
+            value="{{ selected_subject|default('') }}"
+            autocomplete="off"
+          >
+          <select id="subjectSelect">
+            <option value="">— เลือกวิชาที่เคยบันทึก —</option>
+            {% for s in subjects|default([]) %}
+              <option value="{{ s.subject }}" {% if selected_subject and s.subject == selected_subject %}selected{% endif %}>{{ s.subject }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="hint">💡 เลือกวิชาแล้วระบบจะดึงเฉลยที่บันทึกไว้มาใส่ให้ทันที</div>
+
+        <div class="section-label" style="margin-top:18px;">✏️ 4. เฉลย (A-E)</div>
+        <input type="text" name="answer_key" id="answerKeyInput" placeholder="พิมพ์เฉลยติดกัน เช่น AABBCD..." autocomplete="off" value="{{ answer_key_str|default('') }}">
+
+        <div class="row-2" style="margin-top:10px;">
+          <button type="submit" class="btn-save" formaction="/save_key" id="btnSaveKey">
+            💾 บันทึกเฉลย
+          </button>
+          <button type="button" class="btn-save" id="btnLoadKey" style="background: rgba(56,189,248,0.12); color: var(--accent);">
+            🔄 โหลดเฉลย
+          </button>
+        </div>
+        <div class="hint">บันทึกจะผูกกับบัญชีผู้ใช้ของคุณ และแยกตามจำนวนข้อ (60/80)</div>
+
+        <div class="preview-header">
+          <span>พรีวิวเฉลย</span>
+          <span id="answerCount">0 / 60</span>
+        </div>
+        <div id="answerPreview" class="preview-box"></div>
+
+        <div class="section-label">🚀 5. เริ่มตรวจ</div>
+        <div class="action-group">
+          <button type="submit" formaction="/auto_grade" class="btn-main btn-auto">
+            <span>⚡</span> ตรวจอัตโนมัติ
+          </button>
+          <button type="submit" formaction="/select" class="btn-main btn-manual">
+            <span>🖐️</span> ตรวจ Manual
+          </button>
+        </div>
+
+        <div class="note">
+          ใช้ 1 เครดิตต่อการตรวจ 1 ครั้ง
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ✅ Toast -->
+  <div id="toast" class="toast">...</div>
+
+  <!-- ✅ Warp Fail Modal -->
+  <div id="warpFailModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-title">⚠️ ตรวจจับมุมไม่ได้</div>
+      <div id="warpFailText" class="modal-body"></div>
+      <div class="modal-actions">
+        <button type="button" id="btnCloseWarpFail" class="btn-modal">ปิด</button>
+        <button type="button" id="btnGoManual" class="btn-modal btn-modal-primary">ไปโหมด Manual</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const btnQ60 = document.getElementById('btnQ60');
+  const btnQ80 = document.getElementById('btnQ80');
+  const numInput = document.getElementById('numQuestionsInput');
+
+  const answerInput = document.getElementById('answerKeyInput');
+  const previewBox = document.getElementById('answerPreview');
+  const answerCount = document.getElementById('answerCount');
+
+  const fileInput = document.getElementById('fileInput');
+  const btnCamera = document.getElementById('btnCamera');
+  const btnGallery = document.getElementById('btnGallery');
+  const fileName = document.getElementById('fileName');
+
+  const subjectInput = document.getElementById('subjectInput');
+  const subjectSelect = document.getElementById('subjectSelect');
+  const btnLoadKey = document.getElementById('btnLoadKey');
+
+  const toast = document.getElementById('toast');
+
+  const initialNumQ = {{ num_questions|default(60) }};
+  const initialAnswer = "{{ answer_key_str|default('') }}";
+  const initialSubject = "{{ selected_subject|default('') }}";
+
+  // ✅ Warp message from server (มีตัวเดียวพอ)
+  const warpFailMsg = `{{ warp_fail_message|default('')|safe }}`;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1800);
+  }
+
+  function normalizeLetters(raw, numQ) {
+    raw = (raw || "").toUpperCase();
+    let letters = "";
+    for (let ch of raw) {
+      if ("ABCDE".includes(ch)) letters += ch;
+    }
+    if (numQ) letters = letters.slice(0, numQ);
+    return letters;
+  }
+
+  function updatePreview() {
+    const numQ = parseInt(numInput.value || "0", 10);
+    const letters = normalizeLetters(answerInput.value, numQ);
+
+    previewBox.innerHTML = "";
+    if (!numQ) {
+      answerCount.textContent = "0 / 0";
+      return;
+    }
+
+    const filled = Math.min(letters.length, numQ);
+    answerCount.textContent = filled + " / " + numQ;
+
+    for (let i = 0; i < numQ; i++) {
+      const q = i + 1;
+      const ans = letters[i] || "-";
+      const div = document.createElement("div");
+      div.className = "answer-item " + (letters[i] ? "answer-item-filled" : "answer-item-empty");
+      div.textContent = q + ":" + ans;
+      previewBox.appendChild(div);
+    }
+  }
+
+  async function refreshSubjects() {
+    const numQ = parseInt(numInput.value || "60", 10);
+    try {
+      const res = await fetch(`/api/subjects?num_questions=${encodeURIComponent(numQ)}`);
+      const js = await res.json();
+      if (!js.ok) return;
+
+      const current = subjectInput.value.trim();
+      const selected = subjectSelect.value;
+
+      subjectSelect.innerHTML = '<option value="">— เลือกวิชาที่เคยบันทึก —</option>';
+      for (const it of js.items || []) {
+        const opt = document.createElement("option");
+        opt.value = it.subject;
+        opt.textContent = it.subject;
+        subjectSelect.appendChild(opt);
+      }
+
+      if (selected) subjectSelect.value = selected;
+      else if (current) subjectSelect.value = current;
+
+    } catch (e) {}
+  }
+
+  async function loadKeyBySubject(subject) {
+    const numQ = parseInt(numInput.value || "60", 10);
+    subject = (subject || "").trim();
+    if (!subject) {
+      showToast("กรุณาเลือก/พิมพ์ชื่อวิชาก่อน");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/answer_key?subject=${encodeURIComponent(subject)}&num_questions=${encodeURIComponent(numQ)}`);
+      const js = await res.json();
+      if (!js.ok) {
+        showToast(js.message || "โหลดเฉลยไม่สำเร็จ");
+        return;
+      }
+      answerInput.value = js.key_str || "";
+      updatePreview();
+      showToast("โหลดเฉลยแล้ว ✅");
+    } catch (e) {
+      showToast("เชื่อมต่อไม่ได้");
+    }
+  }
+
+  function setQuestions(q) {
+    numInput.value = q.toString();
+    if (q === 60) {
+      btnQ60.classList.add('active');
+      btnQ80.classList.remove('active');
+    } else {
+      btnQ80.classList.add('active');
+      btnQ60.classList.remove('active');
+    }
+
+    answerInput.value = normalizeLetters(answerInput.value, q);
+    updatePreview();
+    refreshSubjects();
+  }
+
+  btnQ60.addEventListener('click', () => setQuestions(60));
+  btnQ80.addEventListener('click', () => setQuestions(80));
+  answerInput.addEventListener('input', updatePreview);
+
+  btnCamera.addEventListener('click', () => {
+    fileInput.setAttribute('capture', 'environment');
+    fileInput.click();
+  });
+
+  btnGallery.addEventListener('click', () => {
+    fileInput.removeAttribute('capture');
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files && fileInput.files[0]) {
+      fileName.textContent = "✅ ไฟล์ที่เลือก: " + fileInput.files[0].name;
+      fileName.style.color = "var(--success)";
+    } else {
+      fileName.textContent = "ยังไม่ได้เลือกรูป";
+      fileName.style.color = "var(--accent)";
+    }
+  });
+
+  subjectSelect.addEventListener('change', () => {
+    const v = subjectSelect.value || "";
+    if (v) {
+      subjectInput.value = v;
+      loadKeyBySubject(v);
+    }
+  });
+
+  btnLoadKey.addEventListener('click', () => {
+    loadKeyBySubject(subjectInput.value);
+  });
+
+  // ✅ Modal helpers
+  function openWarpFailModal(htmlMsg) {
+    const modal = document.getElementById("warpFailModal");
+    const txt = document.getElementById("warpFailText");
+    txt.innerHTML = htmlMsg;
+    modal.style.display = "block";
+  }
+  function closeWarpFailModal() {
+    document.getElementById("warpFailModal").style.display = "none";
+  }
+
+  document.getElementById("btnCloseWarpFail").addEventListener("click", closeWarpFailModal);
+
+  document.getElementById("btnGoManual").addEventListener("click", () => {
+    closeWarpFailModal();
+    const manualBtn = document.querySelector('button[formaction="/select"]');
+    if (manualBtn) manualBtn.click();
+  });
+
+  document.getElementById("warpFailModal").addEventListener("click", (e) => {
+    if (e.target.id === "warpFailModal") closeWarpFailModal();
+  });
+
+  window.addEventListener('load', () => {
+    answerInput.value = initialAnswer;
+    subjectInput.value = initialSubject;
+
+    setQuestions(initialNumQ);
+    updatePreview();
+
+    if (subjectInput.value && !answerInput.value) {
+      loadKeyBySubject(subjectInput.value);
+    }
+
+    // ✅ ถ้า warp fail -> toast + modal (ไม่มี alert ซ้ำ)
+    if (warpFailMsg && warpFailMsg.trim().length > 0) {
+      showToast("ไม่สามารถตรวจจับมุมได้ ❌ (ดูคำแนะนำ)");
+      setTimeout(() => openWarpFailModal(warpFailMsg), 150);
+    }
+  });
+</script>

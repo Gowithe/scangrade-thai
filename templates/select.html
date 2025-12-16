@@ -1,0 +1,358 @@
+TEMPLATE_SELECT = """
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>ปรับมุมกระดาษ | ScanGrade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #38bdf8;
+      --success: #10b981;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Sarabun', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px;
+      overscroll-behavior: none; /* ป้องกันการ pull-to-refresh โดยไม่ตั้งใจ */
+    }
+
+    .container { max-width: 800px; margin: 0 auto; }
+
+    .header { text-align: center; margin-bottom: 20px; }
+    .page-title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin: 0;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+
+    .editor-area {
+      position: relative;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      padding: 40px; /* เพิ่ม Padding เพื่อให้มีที่ว่างสำหรับปุ่มที่ยื่นออกไป */
+      text-align: center;
+      overflow: visible; /* ห้ามซ่อนส่วนที่เกิน */
+      border: 1px dashed var(--card-border);
+      user-select: none;
+      touch-action: none;
+    }
+    
+    .img-wrapper {
+      position: relative;
+      display: inline-block;
+      vertical-align: middle;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+
+    /* SVG Layer */
+    .overlay-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      z-index: 10;
+      overflow: visible;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* เส้นกรอบกระดาษ (สีเขียวทึบ) */
+    .crop-line {
+      stroke: #10b981;
+      stroke-width: 2;
+      stroke-linecap: round;
+      fill: none;
+      filter: drop-shadow(0 0 4px rgba(0,0,0,0.8));
+    }
+
+    /* เส้นเชื่อม (Dashed) ระหว่างปุ่มกับมุม */
+    .link-line {
+      stroke: rgba(255, 255, 255, 0.6);
+      stroke-width: 2;
+      stroke-dasharray: 4;
+    }
+
+    /* ปุ่มลาก */
+    .corner-handle {
+      position: absolute;
+      width: 44px; /* ใหญ่ขึ้นเพื่อให้กดง่าย */
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(16, 185, 129, 0.2); /* พื้นหลังจางๆ */
+      border: 2px solid #10b981;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+      cursor: grab;
+      z-index: 20;
+      transform: translate(-50%, -50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+    
+    /* จุดตรงกลางปุ่ม */
+    .corner-handle::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-radius: 50%;
+    }
+
+    .corner-handle:active {
+      cursor: grabbing;
+      background: rgba(16, 185, 129, 0.5);
+      transform: translate(-50%, -50%) scale(1.1);
+      border-color: #fff;
+    }
+
+    .btn-submit {
+      width: 100%;
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 14px;
+      border: none;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="page-title">Manual Selection</h1>
+    </div>
+
+    <div class="card">
+      <div style="text-align:center; margin-bottom:16px; color:var(--text);">
+        ลากปุ่ม <span style="color:#10b981; font-weight:bold;">วงกลม</span> เพื่อปรับมุมกระดาษ<br>
+        <span style="font-size:0.85rem; color:var(--muted);">(ปุ่มจะอยู่ห่างจากมุม เพื่อไม่ให้นิ้วบัง)</span>
+      </div>
+
+      <div class="editor-area">
+        <div class="img-wrapper" id="wrapper">
+          <img id="sheetImage" src="data:image/jpeg;base64,{{ img_data }}" alt="sheet">
+          
+          <svg class="overlay-svg" id="svgLayer">
+            <line id="link-tl" class="link-line" />
+            <line id="link-tr" class="link-line" />
+            <line id="link-br" class="link-line" />
+            <line id="link-bl" class="link-line" />
+            
+            <polygon id="cropPolygon" class="crop-line" points="" />
+          </svg>
+
+          <div id="handle-tl" class="corner-handle"></div>
+          <div id="handle-tr" class="corner-handle"></div>
+          <div id="handle-br" class="corner-handle"></div>
+          <div id="handle-bl" class="corner-handle"></div>
+        </div>
+      </div>
+
+      <form method="post" action="/grade">
+        <input type="hidden" id="pointsInput" name="points">
+        <input type="hidden" name="answer_key" value="{{ answer_key_str }}">
+        <input type="hidden" name="num_questions" value="{{ num_questions }}">
+        <button type="submit" class="btn-submit">
+          <span>✅</span> ยืนยันและตรวจข้อสอบ
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const img = document.getElementById('sheetImage');
+    const svg = document.getElementById('svgLayer');
+    const poly = document.getElementById('cropPolygon');
+    const pointsInput = document.getElementById('pointsInput');
+
+    const handles = {
+      tl: document.getElementById('handle-tl'),
+      tr: document.getElementById('handle-tr'),
+      br: document.getElementById('handle-br'),
+      bl: document.getElementById('handle-bl')
+    };
+    
+    const links = {
+      tl: document.getElementById('link-tl'),
+      tr: document.getElementById('link-tr'),
+      br: document.getElementById('link-br'),
+      bl: document.getElementById('link-bl')
+    };
+
+    // พิกัดจริงของมุมกระดาษ (x, y)
+    const corners = { tl: {x:0, y:0}, tr: {x:0, y:0}, br: {x:0, y:0}, bl: {x:0, y:0} };
+
+    // ระยะห่างของปุ่มลากจากมุมจริง (Offset) - ปรับค่าตรงนี้เพื่อให้ปุ่มห่างขึ้น/ใกล้ลง
+    const offsetDist = 50; 
+    const offsets = {
+      tl: { x: -offsetDist, y: -offsetDist }, // บนซ้าย: เฉียงขึ้นซ้าย
+      tr: { x:  offsetDist, y: -offsetDist }, // บนขวา: เฉียงขึ้นขวา
+      br: { x:  offsetDist, y:  offsetDist }, // ล่างขวา: เฉียงลงขวา
+      bl: { x: -offsetDist, y:  offsetDist }  // ล่างซ้าย: เฉียงลงซ้าย
+    };
+
+    let imgWidth = 0, imgHeight = 0;
+    let activeKey = null;
+    let startPointer = { x: 0, y: 0 };
+    let startCorner = { x: 0, y: 0 };
+
+    function updateVisuals() {
+      // 1. วาดเส้นกรอบ (Polygon) เชื่อม 4 มุมจริง
+      const pts = `${corners.tl.x},${corners.tl.y} ${corners.tr.x},${corners.tr.y} ${corners.br.x},${corners.br.y} ${corners.bl.x},${corners.bl.y}`;
+      poly.setAttribute("points", pts);
+
+      // 2. อัปเดตตำแหน่งปุ่มและเส้นเชื่อม
+      for (let key in corners) {
+        const c = corners[key];     // มุมจริง
+        const off = offsets[key];   // ค่าเยื้อง
+        
+        // ตำแหน่งปุ่ม = มุมจริง + เยื้อง
+        const hx = c.x + off.x;
+        const hy = c.y + off.y;
+
+        handles[key].style.left = hx + "px";
+        handles[key].style.top  = hy + "px";
+
+        // เส้นเชื่อมจาก มุมจริง -> ปุ่ม
+        links[key].setAttribute("x1", c.x);
+        links[key].setAttribute("y1", c.y);
+        links[key].setAttribute("x2", hx);
+        links[key].setAttribute("y2", hy);
+      }
+
+      // 3. เตรียมค่าส่งกลับ Server (คำนวณ Scale กลับไปเป็นขนาดภาพจริง)
+      const natW = img.naturalWidth || imgWidth;
+      const natH = img.naturalHeight || imgHeight;
+      const scaleX = natW / imgWidth;
+      const scaleY = natH / imgHeight;
+
+      const order = ["tl", "tr", "br", "bl"];
+      const parts = order.map(k => {
+        const cx = Math.round(corners[k].x * scaleX);
+        const cy = Math.round(corners[k].y * scaleY);
+        return cx + "," + cy;
+      });
+      pointsInput.value = parts.join(";");
+    }
+
+    function initCorners() {
+      imgWidth = img.clientWidth;
+      imgHeight = img.clientHeight;
+      
+      // ตั้งค่าเริ่มต้น: ขอบเข้ามา 15% ของรูป
+      const marginX = imgWidth * 0.15;
+      const marginY = imgHeight * 0.15;
+
+      corners.tl = { x: marginX, y: marginY };
+      corners.tr = { x: imgWidth - marginX, y: marginY };
+      corners.br = { x: imgWidth - marginX, y: imgHeight - marginY };
+      corners.bl = { x: marginX, y: imgHeight - marginY };
+
+      updateVisuals();
+    }
+
+    function onPointerDown(e, key) {
+      e.preventDefault();
+      activeKey = key;
+      
+      // บันทึกตำแหน่งนิ้วเริ่มต้น
+      startPointer.x = e.clientX;
+      startPointer.y = e.clientY;
+      
+      // บันทึกตำแหน่งมุมจริงเริ่มต้น
+      startCorner.x = corners[key].x;
+      startCorner.y = corners[key].y;
+
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    }
+
+    function onPointerMove(e) {
+      if (!activeKey) return;
+      e.preventDefault();
+
+      const dx = e.clientX - startPointer.x;
+      const dy = e.clientY - startPointer.y;
+
+      // คำนวณมุมใหม่
+      let newX = startCorner.x + dx;
+      let newY = startCorner.y + dy;
+
+      // ห้ามลากออกนอกรูป
+      newX = Math.max(0, Math.min(newX, imgWidth));
+      newY = Math.max(0, Math.min(newY, imgHeight));
+
+      corners[activeKey].x = newX;
+      corners[activeKey].y = newY;
+
+      updateVisuals();
+    }
+
+    function onPointerUp() {
+      activeKey = null;
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+    }
+
+    // Event Listeners
+    img.addEventListener("load", initCorners);
+    window.addEventListener('resize', initCorners);
+
+    // Bind events to handles
+    for (let key in handles) {
+      handles[key].addEventListener("pointerdown", (e) => onPointerDown(e, key));
+    }
+
+    // Init ถ้าภาพโหลดเสร็จแล้ว
+    if (img.complete) setTimeout(initCorners, 50);
+
+  </script>
+</body>
+</html>
+"""
