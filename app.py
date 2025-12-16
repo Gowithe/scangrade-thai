@@ -24,9 +24,10 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "SECRET_KEY_MISSING")
 
 # -------------------------
-# Upload safety (✅ #1)
+# Upload safety (ข้อ 1)
 # -------------------------
-# จำกัดขนาดไฟล์อัปโหลดทั้งหมด (sheet + slip) แนะนำ 8MB
+# จำกัดขนาดไฟล์อัปโหลดทั้งหมด (sheet + slip)
+# default 8MB (ปรับได้ผ่าน env MAX_UPLOAD_MB)
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "8")) * 1024 * 1024
 
 ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -34,12 +35,10 @@ ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
-    # ส่งข้อความที่อ่านรู้เรื่องแทน Internal Server Error
+    max_mb = int(os.getenv("MAX_UPLOAD_MB", "8"))
     return (
         "<h3>ไฟล์ใหญ่เกินไป</h3>"
-        "<p>กรุณาอัปโหลดรูปขนาดไม่เกิน "
-        + str(int(os.getenv("MAX_UPLOAD_MB", "8")))
-        + "MB</p>"
+        f"<p>กรุณาอัปโหลดรูปขนาดไม่เกิน {max_mb}MB</p>"
         "<p>แนะนำ: ปิดโหมด 48MP / เลือกภาพขนาดปกติ / ส่งเป็น JPEG</p>"
         "<a href='/'>กลับหน้าหลัก</a>",
         413,
@@ -60,7 +59,7 @@ def read_image_from_filestorage(file_storage):
     """
     try:
         data = file_storage.read()
-        file_storage.stream.seek(0)  # รีเซ็ต pointer เผื่อโค้ดอื่นอ่านต่อ
+        file_storage.stream.seek(0)  # reset pointer เผื่อใช้ต่อ
         if not data:
             return None
         arr = np.frombuffer(data, np.uint8)
@@ -101,6 +100,7 @@ EASYSLIP_VERIFY_URL = os.getenv("EASYSLIP_VERIFY_URL", "https://developer.easysl
 # Init DB
 db.init_db()
 
+
 # -------------------------
 # Helpers
 # -------------------------
@@ -138,6 +138,35 @@ def _norm_name(s: str) -> str:
     s = (s or "").strip().lower()
     s = re.sub(r"[^a-z0-9ก-๙]+", "", s)
     return s
+
+
+# -------------------------
+# Anti double-submit (ข้อ 2 / BACKEND)
+# -------------------------
+def start_action_lock(action_name: str, ttl_sec: int = 40) -> bool:
+    """
+    ล็อก action ต่อ session กันกดซ้ำ
+    return False ถ้า action เดิมกำลังทำอยู่
+    """
+    now = time.time()
+    locks = session.get("_action_locks", {})
+
+    # cleanup expired
+    locks = {k: v for k, v in locks.items() if v > now}
+
+    if action_name in locks:
+        session["_action_locks"] = locks
+        return False
+
+    locks[action_name] = now + ttl_sec
+    session["_action_locks"] = locks
+    return True
+
+
+def end_action_lock(action_name: str):
+    locks = session.get("_action_locks", {})
+    locks.pop(action_name, None)
+    session["_action_locks"] = locks
 
 
 # ✅ per-session manual upload helpers
@@ -271,13 +300,10 @@ def verify_slip_with_easyslip(file_path: str, expected_amount: float):
 
         if expected_name_th and _norm_name(expected_name_th) in _norm_name(receiver_name_th):
             ok_dest = True
-
         if (not ok_dest) and expected_name_en and _norm_name(expected_name_en) in _norm_name(receiver_name_en):
             ok_dest = True
-
         if (not ok_dest) and expected_bank_last4 and got_bank_last4 and got_bank_last4 == expected_bank_last4:
             ok_dest = True
-
         if (not ok_dest) and expected_proxy_last4 and got_proxy_last4 and got_proxy_last4 == expected_proxy_last4:
             ok_dest = True
 
@@ -390,6 +416,7 @@ def verify():
 def logout():
     session.pop("username", None)
 
+    # cleanup manual file (ถ้าค้างอยู่)
     manual_path = session.pop("manual_upload_path", None)
     try:
         if manual_path and os.path.exists(manual_path):
@@ -509,157 +536,168 @@ def buy_credits():
     os.makedirs("slips", exist_ok=True)
 
     if request.method == "POST":
-        pkg = request.form.get("package")
-        slip = request.files.get("slip")
+        # ✅ กันกดซ้ำเติมเงิน
+        if not start_action_lock("buy_credits", ttl_sec=60):
+            return "⏳ กำลังตรวจสอบการชำระเงิน กรุณารอสักครู่ (อย่ากดซ้ำ)", 429
 
-        if pkg not in db.PACKAGES:
-            return "แพ็กเกจไม่ถูกต้อง", 400
-        if not slip or slip.filename == "":
-            return "กรุณาอัปโหลดสลิป", 400
-        if not is_allowed_image_filename(slip.filename):
-            return "รองรับสลิปเป็นรูป .jpg .jpeg .png .webp เท่านั้น", 400
+        try:
+            pkg = request.form.get("package")
+            slip = request.files.get("slip")
 
-        expected_price = float(db.PACKAGES[pkg]["price"])
+            if pkg not in db.PACKAGES:
+                return "แพ็กเกจไม่ถูกต้อง", 400
+            if not slip or slip.filename == "":
+                return "กรุณาอัปโหลดสลิป", 400
+            if not is_allowed_image_filename(slip.filename):
+                return "รองรับสลิปเป็นรูป .jpg .jpeg .png .webp เท่านั้น", 400
 
-        ok, msg, jpg_bytes = normalize_slip_to_jpg(slip)
-        if not ok:
-            return msg, 400
+            expected_price = float(db.PACKAGES[pkg]["price"])
 
-        safe_name = f"slip_{int(time.time())}_{random.randint(100000,999999)}.jpg"
-        save_path = os.path.join("slips", safe_name)
-        with open(save_path, "wb") as f:
-            f.write(jpg_bytes)
+            ok, msg, jpg_bytes = normalize_slip_to_jpg(slip)
+            if not ok:
+                return msg, 400
 
-        is_valid, verify_msg, slip_ref, paid_amount = verify_slip_with_easyslip(
-            save_path, expected_amount=expected_price
-        )
+            safe_name = f"slip_{int(time.time())}_{random.randint(100000,999999)}.jpg"
+            save_path = os.path.join("slips", safe_name)
+            with open(save_path, "wb") as f:
+                f.write(jpg_bytes)
 
-        status_title = "⏳ กำลังตรวจสอบ..."
-        status_color = "#f59e0b"
-        status_icon = "⏳"
-        btn_text = "กลับหน้าหลัก"
-        btn_link = "/"
-        status_desc = "ระบบกำลังตรวจสอบรายการ..."
+            is_valid, verify_msg, slip_ref, paid_amount = verify_slip_with_easyslip(
+                save_path, expected_amount=expected_price
+            )
 
-        if is_valid and db.is_slip_ref_used(slip_ref):
-            is_valid = False
-            verify_msg = "สลิปนี้ถูกใช้ไปแล้ว (ตรวจพบธุรกรรมซ้ำ)"
+            # UI defaults
+            status_title = "⏳ กำลังตรวจสอบ..."
+            status_color = "#f59e0b"
+            status_icon = "⏳"
+            btn_text = "กลับหน้าหลัก"
+            btn_link = "/"
+            status_desc = "ระบบกำลังตรวจสอบรายการ..."
 
-        order_id = None
-        pkg_info = db.PACKAGES[pkg]
-
-        if is_valid:
-            try:
-                order_id = db.create_order(username, pkg, safe_name, slip_ref)  # <-- int
-            except ValueError:
+            # กันซ้ำด้วย slip_ref
+            if is_valid and db.is_slip_ref_used(slip_ref):
                 is_valid = False
-                verify_msg = "สลิปนี้ถูกใช้ไปแล้ว (ระบบป้องกันการใช้ซ้ำ)"
+                verify_msg = "สลิปนี้ถูกใช้ไปแล้ว (ตรวจพบธุรกรรมซ้ำ)"
 
-        if is_valid and order_id:
-            print(f"[AUTO-APPROVE] Order #{order_id} Verified! slip_ref={slip_ref}")
+            order_id = None
+            pkg_info = db.PACKAGES[pkg]
 
-            order_row, user_row = db.approve_order_and_add_credits(order_id)
-            if not user_row:
-                is_valid = False
-                verify_msg = "เติมเครดิตไม่สำเร็จ (ไม่พบผู้ใช้ในระบบ)"
-            else:
-                new_credits = user_row["credits"]
+            if is_valid:
+                try:
+                    order_id = db.create_order(username, pkg, safe_name, slip_ref)  # <-- int
+                except ValueError:
+                    is_valid = False
+                    verify_msg = "สลิปนี้ถูกใช้ไปแล้ว (ระบบป้องกันการใช้ซ้ำ)"
 
-                status_title = "✅ เติมเครดิตสำเร็จ!"
-                status_color = "#10b981"
-                status_icon = "🎉"
-                status_desc = (
-                    f"ระบบตรวจสอบเรียบร้อย<br>"
-                    f"ยอดเงิน: <b>{paid_amount}</b> บาท<br>"
-                    f"คุณได้รับเครดิตเพิ่ม <b>{pkg_info['credits']}</b> ครั้ง<br>"
-                    f"เครดิตรวม: <b>{new_credits}</b><br>"
-                    f"<span style='font-size:0.85rem;color:#94a3b8;'>ref: {slip_ref}</span>"
-                )
-                btn_text = "กลับหน้าหลัก"
-                btn_link = "/"
-        if not is_valid:
-            print(f"[SLIP-FAIL] pkg={pkg} user={username} -> {verify_msg} ref={slip_ref}")
-            try:
-                os.remove(save_path)
-            except Exception:
-                pass
+            if is_valid and order_id:
+                print(f"[AUTO-APPROVE] Order #{order_id} Verified! slip_ref={slip_ref}")
 
-            status_title = "❌ ชำระเงินไม่สำเร็จ"
-            status_color = "#ef4444"
-            status_icon = "⚠️"
-            status_desc = f"""
-            <b>เกิดข้อผิดพลาด:</b><br>
-            <span style="color:#fca5a5;">{verify_msg}</span><br><br>
-            กรุณาตรวจสอบความถูกต้องแล้วลองใหม่อีกครั้ง
+                order_row, user_row = db.approve_order_and_add_credits(order_id)
+                if not user_row:
+                    is_valid = False
+                    verify_msg = "เติมเครดิตไม่สำเร็จ (ไม่พบผู้ใช้ในระบบ)"
+                else:
+                    new_credits = user_row["credits"]
+                    status_title = "✅ เติมเครดิตสำเร็จ!"
+                    status_color = "#10b981"
+                    status_icon = "🎉"
+                    status_desc = (
+                        f"ระบบตรวจสอบเรียบร้อย<br>"
+                        f"ยอดเงิน: <b>{paid_amount}</b> บาท<br>"
+                        f"คุณได้รับเครดิตเพิ่ม <b>{pkg_info['credits']}</b> ครั้ง<br>"
+                        f"เครดิตรวม: <b>{new_credits}</b><br>"
+                        f"<span style='font-size:0.85rem;color:#94a3b8;'>ref: {slip_ref}</span>"
+                    )
+                    btn_text = "กลับหน้าหลัก"
+                    btn_link = "/"
+
+            if not is_valid:
+                print(f"[SLIP-FAIL] pkg={pkg} user={username} -> {verify_msg} ref={slip_ref}")
+                try:
+                    os.remove(save_path)
+                except Exception:
+                    pass
+
+                status_title = "❌ ชำระเงินไม่สำเร็จ"
+                status_color = "#ef4444"
+                status_icon = "⚠️"
+                status_desc = f"""
+                <b>เกิดข้อผิดพลาด:</b><br>
+                <span style="color:#fca5a5;">{verify_msg}</span><br><br>
+                กรุณาตรวจสอบความถูกต้องแล้วลองใหม่อีกครั้ง
+                """
+                btn_text = "ลองใหม่อีกครั้ง"
+                btn_link = "/buy"
+
+            show_home_secondary = (btn_link != "/")
+
+            html = f"""
+            <!doctype html>
+            <html lang="th">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+              <style>
+                * {{ box-sizing: border-box; }}
+                body {{
+                  font-family: 'Sarabun', sans-serif;
+                  background: #0f172a; color: #e5e7eb;
+                  margin: 0; padding: 20px;
+                  display: flex; align-items: center; justify-content: center;
+                  min-height: 100vh;
+                }}
+                .card {{
+                  background: rgba(30, 41, 59, 0.75);
+                  backdrop-filter: blur(16px);
+                  padding: 40px 30px;
+                  border-radius: 24px;
+                  text-align: center;
+                  width: 100%; max-width: 420px;
+                  border: 1px solid rgba(255, 255, 255, 0.08);
+                  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+                }}
+                h2 {{ color: {status_color}; margin-top: 0; font-size: 1.5rem; margin-bottom: 16px; }}
+                p {{ font-size: 1.05rem; color: #cbd5e1; margin-bottom: 24px; line-height: 1.6; }}
+                .btn-row{{ display:flex; gap:10px; flex-direction:column; }}
+                .btn {{
+                  display: block; width: 100%; padding: 14px 0;
+                  background: linear-gradient(135deg, #3b82f6, #2563eb);
+                  color: white; text-decoration: none; font-weight: 700;
+                  border-radius: 12px; font-size: 1rem;
+                  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+                }}
+                .btn-retry {{
+                  background: linear-gradient(135deg, #ef4444, #b91c1c);
+                  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+                }}
+                .btn-secondary {{
+                  background: rgba(148,163,184,0.15);
+                  box-shadow: none;
+                  border: 1px solid rgba(255,255,255,0.12);
+                }}
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div style="font-size: 4rem; margin-bottom: 20px;">{status_icon}</div>
+                <h2>{status_title}</h2>
+                <p>{status_desc}</p>
+
+                <div class="btn-row">
+                  <a href="{btn_link}" class="btn {"btn-retry" if btn_link=="/buy" else ""}">{btn_text}</a>
+                  {"<a href='/' class='btn btn-secondary'>กลับหน้าหลัก</a>" if show_home_secondary else ""}
+                </div>
+              </div>
+            </body>
+            </html>
             """
-            btn_text = "ลองใหม่อีกครั้ง"
-            btn_link = "/buy"
+            return html
 
-        show_home_secondary = (btn_link != "/")
+        finally:
+            end_action_lock("buy_credits")
 
-        html = f"""
-        <!doctype html>
-        <html lang="th">
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
-          <style>
-            * {{ box-sizing: border-box; }}
-            body {{
-              font-family: 'Sarabun', sans-serif;
-              background: #0f172a; color: #e5e7eb;
-              margin: 0; padding: 20px;
-              display: flex; align-items: center; justify-content: center;
-              min-height: 100vh;
-            }}
-            .card {{
-              background: rgba(30, 41, 59, 0.75);
-              backdrop-filter: blur(16px);
-              padding: 40px 30px;
-              border-radius: 24px;
-              text-align: center;
-              width: 100%; max-width: 420px;
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-            }}
-            h2 {{ color: {status_color}; margin-top: 0; font-size: 1.5rem; margin-bottom: 16px; }}
-            p {{ font-size: 1.05rem; color: #cbd5e1; margin-bottom: 24px; line-height: 1.6; }}
-            .btn-row{{ display:flex; gap:10px; flex-direction:column; }}
-            .btn {{
-              display: block; width: 100%; padding: 14px 0;
-              background: linear-gradient(135deg, #3b82f6, #2563eb);
-              color: white; text-decoration: none; font-weight: 700;
-              border-radius: 12px; font-size: 1rem;
-              box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
-            }}
-            .btn-retry {{
-              background: linear-gradient(135deg, #ef4444, #b91c1c);
-              box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
-            }}
-            .btn-secondary {{
-              background: rgba(148,163,184,0.15);
-              box-shadow: none;
-              border: 1px solid rgba(255,255,255,0.12);
-            }}
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <div style="font-size: 4rem; margin-bottom: 20px;">{status_icon}</div>
-            <h2>{status_title}</h2>
-            <p>{status_desc}</p>
-
-            <div class="btn-row">
-              <a href="{btn_link}" class="btn {"btn-retry" if btn_link=="/buy" else ""}">{btn_text}</a>
-              {"<a href='/' class='btn btn-secondary'>กลับหน้าหลัก</a>" if show_home_secondary else ""}
-            </div>
-          </div>
-        </body>
-        </html>
-        """
-        return html
-
+    # GET
     return render_template(
         "buy.html",
         username=username,
@@ -680,66 +718,75 @@ def auto_grade():
     if user["credits"] <= 0:
         return redirect("/buy")
 
-    file = request.files.get("sheet")
-    if not file or file.filename == "":
-        session["warp_fail_message"] = "❌ กรุณาเลือกรูปกระดาษคำตอบก่อน"
+    # ✅ กันกดซ้ำ
+    if not start_action_lock("auto_grade", ttl_sec=45):
+        session["warp_fail_message"] = "⏳ ระบบกำลังตรวจอยู่ กรุณารอสักครู่ (อย่ากดซ้ำ)"
         return redirect("/")
-
-    if not is_allowed_image_filename(file.filename):
-        session["warp_fail_message"] = "❌ รองรับเฉพาะไฟล์รูป .jpg .jpeg .png .webp"
-        return redirect("/")
-
-    num_questions = int(request.form.get("num_questions", "60"))
-    key_str = (request.form.get("answer_key") or "").strip()
-    subject = (request.form.get("subject") or "").strip()
-
-    session["last_answer_key"] = utils.normalize_answer_key_str(key_str, num_questions)
-    session["last_subject"] = subject
-    session["last_num_questions"] = num_questions
-
-    img = read_image_from_filestorage(file)
-    if img is None:
-        session["warp_fail_message"] = "❌ ไม่สามารถอ่านไฟล์รูปได้ (ไฟล์เสียหรือไม่รองรับ) กรุณาลองถ่าย/เลือกใหม่"
-        return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
-
-    img = downscale_image(img, max_side=2000)
-
-    warped = utils.auto_detect_and_warp(img)
-    if warped is None:
-        session["warp_fail_message"] = (
-            "❌ ระบบไม่สามารถตรวจจับมุมกระดาษคำตอบได้<br><br>"
-            "💡 คำแนะนำ:<br>"
-            "- ถ่ายในที่แสงสว่างเพียงพอ<br>"
-            "- ให้เห็นกระดาษทั้ง 4 มุมชัดเจน<br>"
-            "- วางกระดาษบนพื้นหลังเรียบ/ตัดของรกออก<br><br>"
-            "หรือเลือก <b>โหมด Manual</b> เพื่อกำหนดมุมเอง"
-        )
-        return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
     try:
-        omr = omr60 if num_questions == 60 else omr80
-        answers, eff_key, detail, stats, debug_img = omr.process_auto(warped, key_str)
-    except Exception as e:
-        session["warp_fail_message"] = f"❌ ตรวจไม่สำเร็จ: {e}"
-        return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
+        file = request.files.get("sheet")
+        if not file or file.filename == "":
+            session["warp_fail_message"] = "❌ กรุณาเลือกรูปกระดาษคำตอบก่อน"
+            return redirect("/")
 
-    db.set_user_credits(username, user["credits"] - 1)
+        if not is_allowed_image_filename(file.filename):
+            session["warp_fail_message"] = "❌ รองรับเฉพาะไฟล์รูป .jpg .jpeg .png .webp"
+            return redirect("/")
 
-    _, buf = cv2.imencode(".jpg", debug_img)
-    debug_b64 = base64.b64encode(buf).decode("utf-8")
+        num_questions = int(request.form.get("num_questions", "60"))
+        key_str = (request.form.get("answer_key") or "").strip()
+        subject = (request.form.get("subject") or "").strip()
 
-    return render_template(
-        "result.html",
-        answers=answers,
-        stats=stats,
-        detail=detail,
-        debug_image=debug_b64,
-        num_questions=num_questions,
-        answer_key=eff_key,
-        answer_key_str_raw=utils.normalize_answer_key_str(key_str, num_questions),
-        username=username,
-        credits=user["credits"] - 1,
-    )
+        session["last_answer_key"] = utils.normalize_answer_key_str(key_str, num_questions)
+        session["last_subject"] = subject
+        session["last_num_questions"] = num_questions
+
+        img = read_image_from_filestorage(file)
+        if img is None:
+            session["warp_fail_message"] = "❌ ไม่สามารถอ่านไฟล์รูปได้ (ไฟล์เสียหรือไม่รองรับ) กรุณาลองถ่าย/เลือกใหม่"
+            return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
+
+        img = downscale_image(img, max_side=2000)
+
+        warped = utils.auto_detect_and_warp(img)
+        if warped is None:
+            session["warp_fail_message"] = (
+                "❌ ระบบไม่สามารถตรวจจับมุมกระดาษคำตอบได้<br><br>"
+                "💡 คำแนะนำ:<br>"
+                "- ถ่ายในที่แสงสว่างเพียงพอ<br>"
+                "- ให้เห็นกระดาษทั้ง 4 มุมชัดเจน<br>"
+                "- วางกระดาษบนพื้นหลังเรียบ/ตัดของรกออก<br><br>"
+                "หรือเลือก <b>โหมด Manual</b> เพื่อกำหนดมุมเอง"
+            )
+            return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
+
+        try:
+            omr = omr60 if num_questions == 60 else omr80
+            answers, eff_key, detail, stats, debug_img = omr.process_auto(warped, key_str)
+        except Exception as e:
+            session["warp_fail_message"] = f"❌ ตรวจไม่สำเร็จ: {e}"
+            return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
+
+        db.set_user_credits(username, user["credits"] - 1)
+
+        _, buf = cv2.imencode(".jpg", debug_img)
+        debug_b64 = base64.b64encode(buf).decode("utf-8")
+
+        return render_template(
+            "result.html",
+            answers=answers,
+            stats=stats,
+            detail=detail,
+            debug_image=debug_b64,
+            num_questions=num_questions,
+            answer_key=eff_key,
+            answer_key_str_raw=utils.normalize_answer_key_str(key_str, num_questions),
+            username=username,
+            credits=user["credits"] - 1,
+        )
+
+    finally:
+        end_action_lock("auto_grade")
 
 
 @app.route("/select", methods=["POST"])
@@ -772,6 +819,7 @@ def select_corners():
 
     img = downscale_image(img, max_side=2400)
 
+    # ✅ per-session manual image path (ไม่ชนกัน)
     old_path = session.get("manual_upload_path")
     if old_path and os.path.exists(old_path):
         try:
@@ -801,63 +849,73 @@ def grade():
     if user["credits"] <= 0:
         return redirect("/buy")
 
-    manual_path = session.get("manual_upload_path")
-    if not manual_path or not os.path.exists(manual_path):
-        session["warp_fail_message"] = "❌ ไม่พบรูปสำหรับ Manual (กรุณาอัปโหลดใหม่)"
-        return redirect("/")
-
-    points_str = request.form.get("points", "")
-    if not points_str:
-        session["warp_fail_message"] = "❌ กรุณาเลือก 4 มุมก่อน"
+    # ✅ กันกดซ้ำ (manual)
+    if not start_action_lock("manual_grade", ttl_sec=45):
+        session["warp_fail_message"] = "⏳ ระบบกำลังตรวจอยู่ กรุณารอสักครู่ (อย่ากดซ้ำ)"
         return redirect("/")
 
     try:
-        pts = [list(map(float, p.split(","))) for p in points_str.split(";")]
-        if len(pts) != 4:
-            raise ValueError("points must be 4")
-    except Exception:
-        session["warp_fail_message"] = "❌ จุดมุมไม่ถูกต้อง กรุณาลองใหม่"
-        return redirect("/")
+        manual_path = session.get("manual_upload_path")
+        if not manual_path or not os.path.exists(manual_path):
+            session["warp_fail_message"] = "❌ ไม่พบรูปสำหรับ Manual (กรุณาอัปโหลดใหม่)"
+            return redirect("/")
 
-    img = cv2.imread(manual_path)
-    if img is None:
-        session["warp_fail_message"] = "❌ ไม่สามารถอ่านรูปสำหรับ Manual ได้ กรุณาอัปโหลดใหม่"
-        return redirect("/")
+        points_str = request.form.get("points", "")
+        if not points_str:
+            session["warp_fail_message"] = "❌ กรุณาเลือก 4 มุมก่อน"
+            return redirect("/")
 
-    warped = utils.warp_from_four_points(img, pts)
+        try:
+            pts = [list(map(float, p.split(","))) for p in points_str.split(";")]
+            if len(pts) != 4:
+                raise ValueError("points must be 4")
+        except Exception:
+            session["warp_fail_message"] = "❌ จุดมุมไม่ถูกต้อง กรุณาลองใหม่"
+            return redirect("/")
 
-    num_questions = int(request.form.get("num_questions", "60"))
-    key_str = (request.form.get("answer_key") or "").strip()
+        img = cv2.imread(manual_path)
+        if img is None:
+            session["warp_fail_message"] = "❌ ไม่สามารถอ่านรูปสำหรับ Manual ได้ กรุณาอัปโหลดใหม่"
+            return redirect("/")
 
-    try:
-        omr = omr60 if num_questions == 60 else omr80
-        answers, eff_key, detail, stats, debug_img = omr.process_auto(warped, key_str)
-    except Exception as e:
-        session["warp_fail_message"] = f"❌ ตรวจไม่สำเร็จ: {e}"
-        return redirect(f"/?num_questions={num_questions}")
+        warped = utils.warp_from_four_points(img, pts)
 
-    db.set_user_credits(username, user["credits"] - 1)
+        num_questions = int(request.form.get("num_questions", "60"))
+        key_str = (request.form.get("answer_key") or "").strip()
 
-    try:
-        if manual_path and os.path.exists(manual_path):
-            os.remove(manual_path)
-    except Exception:
-        pass
-    session.pop("manual_upload_path", None)
+        try:
+            omr = omr60 if num_questions == 60 else omr80
+            answers, eff_key, detail, stats, debug_img = omr.process_auto(warped, key_str)
+        except Exception as e:
+            session["warp_fail_message"] = f"❌ ตรวจไม่สำเร็จ: {e}"
+            return redirect(f"/?num_questions={num_questions}")
 
-    _, buf = cv2.imencode(".jpg", debug_img)
-    return render_template(
-        "result.html",
-        answers=answers,
-        stats=stats,
-        detail=detail,
-        debug_image=base64.b64encode(buf).decode("utf-8"),
-        num_questions=num_questions,
-        answer_key=eff_key,
-        answer_key_str_raw=utils.normalize_answer_key_str(key_str, num_questions),
-        username=username,
-        credits=user["credits"] - 1,
-    )
+        db.set_user_credits(username, user["credits"] - 1)
+
+        # ✅ cleanup manual file after success
+        try:
+            if manual_path and os.path.exists(manual_path):
+                os.remove(manual_path)
+        except Exception:
+            pass
+        session.pop("manual_upload_path", None)
+
+        _, buf = cv2.imencode(".jpg", debug_img)
+        return render_template(
+            "result.html",
+            answers=answers,
+            stats=stats,
+            detail=detail,
+            debug_image=base64.b64encode(buf).decode("utf-8"),
+            num_questions=num_questions,
+            answer_key=eff_key,
+            answer_key_str_raw=utils.normalize_answer_key_str(key_str, num_questions),
+            username=username,
+            credits=user["credits"] - 1,
+        )
+
+    finally:
+        end_action_lock("manual_grade")
 
 
 @app.route("/slips/<path:filename>")
@@ -903,5 +961,5 @@ def next_sheet():
 
 
 if __name__ == "__main__":
-    # ✅ Production: รันด้วย gunicorn แทน (เช่น gunicorn app:app)
+    # Production: รันด้วย gunicorn แทน (เช่น gunicorn app:app)
     app.run(host="0.0.0.0", port=5000, debug=False)
