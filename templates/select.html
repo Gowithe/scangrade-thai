@@ -30,7 +30,7 @@ TEMPLATE_SELECT = """
       color: var(--text);
       min-height: 100vh;
       padding: 16px;
-      overscroll-behavior: none; /* ป้องกันการ pull-to-refresh โดยไม่ตั้งใจ */
+      overscroll-behavior: none;
     }
 
     .container { max-width: 800px; margin: 0 auto; }
@@ -58,9 +58,9 @@ TEMPLATE_SELECT = """
       position: relative;
       background: rgba(0, 0, 0, 0.5);
       border-radius: 12px;
-      padding: 40px; /* เพิ่ม Padding เพื่อให้มีที่ว่างสำหรับปุ่มที่ยื่นออกไป */
+      padding: 40px;
       text-align: center;
-      overflow: visible; /* ห้ามซ่อนส่วนที่เกิน */
+      overflow: visible;
       border: 1px dashed var(--card-border);
       user-select: none;
       touch-action: none;
@@ -81,7 +81,6 @@ TEMPLATE_SELECT = """
       pointer-events: none;
     }
 
-    /* SVG Layer */
     .overlay-svg {
       position: absolute;
       left: 0;
@@ -93,7 +92,6 @@ TEMPLATE_SELECT = """
       height: 100%;
     }
 
-    /* เส้นกรอบกระดาษ (สีเขียวทึบ) */
     .crop-line {
       stroke: #10b981;
       stroke-width: 2;
@@ -102,20 +100,18 @@ TEMPLATE_SELECT = """
       filter: drop-shadow(0 0 4px rgba(0,0,0,0.8));
     }
 
-    /* เส้นเชื่อม (Dashed) ระหว่างปุ่มกับมุม */
     .link-line {
       stroke: rgba(255, 255, 255, 0.6);
       stroke-width: 2;
       stroke-dasharray: 4;
     }
 
-    /* ปุ่มลาก */
     .corner-handle {
       position: absolute;
-      width: 44px; /* ใหญ่ขึ้นเพื่อให้กดง่าย */
+      width: 44px;
       height: 44px;
       border-radius: 50%;
-      background: rgba(16, 185, 129, 0.2); /* พื้นหลังจางๆ */
+      background: rgba(16, 185, 129, 0.2);
       border: 2px solid #10b981;
       box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
       cursor: grab;
@@ -127,7 +123,6 @@ TEMPLATE_SELECT = """
       backdrop-filter: blur(4px);
     }
     
-    /* จุดตรงกลางปุ่ม */
     .corner-handle::after {
       content: '';
       width: 8px;
@@ -159,6 +154,11 @@ TEMPLATE_SELECT = """
       justify-content: center;
       align-items: center;
       gap: 10px;
+    }
+    .btn-submit:disabled{
+      opacity: .65;
+      cursor: not-allowed;
+      box-shadow: none;
     }
   </style>
 </head>
@@ -194,11 +194,11 @@ TEMPLATE_SELECT = """
         </div>
       </div>
 
-      <form method="post" action="/grade">
+      <form method="post" action="/grade" id="gradeForm">
         <input type="hidden" id="pointsInput" name="points">
         <input type="hidden" name="answer_key" value="{{ answer_key_str }}">
         <input type="hidden" name="num_questions" value="{{ num_questions }}">
-        <button type="submit" class="btn-submit">
+        <button type="submit" class="btn-submit" id="btnGrade">
           <span>✅</span> ยืนยันและตรวจข้อสอบ
         </button>
       </form>
@@ -225,16 +225,14 @@ TEMPLATE_SELECT = """
       bl: document.getElementById('link-bl')
     };
 
-    // พิกัดจริงของมุมกระดาษ (x, y)
     const corners = { tl: {x:0, y:0}, tr: {x:0, y:0}, br: {x:0, y:0}, bl: {x:0, y:0} };
 
-    // ระยะห่างของปุ่มลากจากมุมจริง (Offset) - ปรับค่าตรงนี้เพื่อให้ปุ่มห่างขึ้น/ใกล้ลง
     const offsetDist = 50; 
     const offsets = {
-      tl: { x: -offsetDist, y: -offsetDist }, // บนซ้าย: เฉียงขึ้นซ้าย
-      tr: { x:  offsetDist, y: -offsetDist }, // บนขวา: เฉียงขึ้นขวา
-      br: { x:  offsetDist, y:  offsetDist }, // ล่างขวา: เฉียงลงขวา
-      bl: { x: -offsetDist, y:  offsetDist }  // ล่างซ้าย: เฉียงลงซ้าย
+      tl: { x: -offsetDist, y: -offsetDist },
+      tr: { x:  offsetDist, y: -offsetDist },
+      br: { x:  offsetDist, y:  offsetDist },
+      bl: { x: -offsetDist, y:  offsetDist }
     };
 
     let imgWidth = 0, imgHeight = 0;
@@ -243,30 +241,24 @@ TEMPLATE_SELECT = """
     let startCorner = { x: 0, y: 0 };
 
     function updateVisuals() {
-      // 1. วาดเส้นกรอบ (Polygon) เชื่อม 4 มุมจริง
       const pts = `${corners.tl.x},${corners.tl.y} ${corners.tr.x},${corners.tr.y} ${corners.br.x},${corners.br.y} ${corners.bl.x},${corners.bl.y}`;
       poly.setAttribute("points", pts);
 
-      // 2. อัปเดตตำแหน่งปุ่มและเส้นเชื่อม
       for (let key in corners) {
-        const c = corners[key];     // มุมจริง
-        const off = offsets[key];   // ค่าเยื้อง
-        
-        // ตำแหน่งปุ่ม = มุมจริง + เยื้อง
+        const c = corners[key];
+        const off = offsets[key];
         const hx = c.x + off.x;
         const hy = c.y + off.y;
 
         handles[key].style.left = hx + "px";
         handles[key].style.top  = hy + "px";
 
-        // เส้นเชื่อมจาก มุมจริง -> ปุ่ม
         links[key].setAttribute("x1", c.x);
         links[key].setAttribute("y1", c.y);
         links[key].setAttribute("x2", hx);
         links[key].setAttribute("y2", hy);
       }
 
-      // 3. เตรียมค่าส่งกลับ Server (คำนวณ Scale กลับไปเป็นขนาดภาพจริง)
       const natW = img.naturalWidth || imgWidth;
       const natH = img.naturalHeight || imgHeight;
       const scaleX = natW / imgWidth;
@@ -285,7 +277,6 @@ TEMPLATE_SELECT = """
       imgWidth = img.clientWidth;
       imgHeight = img.clientHeight;
       
-      // ตั้งค่าเริ่มต้น: ขอบเข้ามา 15% ของรูป
       const marginX = imgWidth * 0.15;
       const marginY = imgHeight * 0.15;
 
@@ -300,12 +291,8 @@ TEMPLATE_SELECT = """
     function onPointerDown(e, key) {
       e.preventDefault();
       activeKey = key;
-      
-      // บันทึกตำแหน่งนิ้วเริ่มต้น
       startPointer.x = e.clientX;
       startPointer.y = e.clientY;
-      
-      // บันทึกตำแหน่งมุมจริงเริ่มต้น
       startCorner.x = corners[key].x;
       startCorner.y = corners[key].y;
 
@@ -320,11 +307,9 @@ TEMPLATE_SELECT = """
       const dx = e.clientX - startPointer.x;
       const dy = e.clientY - startPointer.y;
 
-      // คำนวณมุมใหม่
       let newX = startCorner.x + dx;
       let newY = startCorner.y + dy;
 
-      // ห้ามลากออกนอกรูป
       newX = Math.max(0, Math.min(newX, imgWidth));
       newY = Math.max(0, Math.min(newY, imgHeight));
 
@@ -340,17 +325,31 @@ TEMPLATE_SELECT = """
       document.removeEventListener("pointerup", onPointerUp);
     }
 
-    // Event Listeners
     img.addEventListener("load", initCorners);
     window.addEventListener('resize', initCorners);
 
-    // Bind events to handles
     for (let key in handles) {
       handles[key].addEventListener("pointerdown", (e) => onPointerDown(e, key));
     }
 
-    // Init ถ้าภาพโหลดเสร็จแล้ว
     if (img.complete) setTimeout(initCorners, 50);
+
+    // ✅ กันกดซ้ำส่งคะแนน (Manual Grade)
+    (function(){
+      const form = document.getElementById("gradeForm");
+      const btn = document.getElementById("btnGrade");
+      if (!form || !btn) return;
+
+      let submitted = false;
+
+      form.addEventListener("submit", () => {
+        if (submitted) return;
+        submitted = true;
+
+        btn.disabled = true;
+        btn.textContent = "⏳ กำลังตรวจ...";
+      });
+    })();
 
   </script>
 </body>
