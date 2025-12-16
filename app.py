@@ -495,31 +495,39 @@ def buy_credits():
             is_valid = False
             verify_msg = "สลิปนี้ถูกใช้ไปแล้ว (ตรวจพบธุรกรรมซ้ำ)"
 
-        order = None
+        order_id = None
+        pkg_info = db.PACKAGES[pkg]
+        
         if is_valid:
             try:
-                order = db.create_order(username, pkg, safe_name, slip_ref)
+                order_id = db.create_order(username, pkg, safe_name, slip_ref)  # <-- int
             except ValueError:
                 is_valid = False
                 verify_msg = "สลิปนี้ถูกใช้ไปแล้ว (ระบบป้องกันการใช้ซ้ำ)"
-
-        if is_valid and order:
-            print(f"[AUTO-APPROVE] Order #{order['id']} Verified! slip_ref={slip_ref}")
-            _, _, new_credits = db.approve_order_and_add_credits(order["id"])
-
+        
+        if is_valid and order_id:
+            print(f"[AUTO-APPROVE] Order #{order_id} Verified! slip_ref={slip_ref}")
+        
+            order_row, user_row = db.approve_order_and_add_credits(order_id)
+            # user_row = {"username":..., "credits": new_credits}
+        
+            new_credits = user_row["credits"]
+        
             status_title = "✅ เติมเครดิตสำเร็จ!"
             status_color = "#10b981"
             status_icon = "🎉"
             status_desc = (
                 f"ระบบตรวจสอบเรียบร้อย<br>"
                 f"ยอดเงิน: <b>{paid_amount}</b> บาท<br>"
-                f"คุณได้รับเครดิตเพิ่ม <b>{order['credits']}</b> ครั้ง<br>"
+                f"คุณได้รับเครดิตเพิ่ม <b>{pkg_info['credits']}</b> ครั้ง<br>"
                 f"เครดิตรวม: <b>{new_credits}</b><br>"
                 f"<span style='font-size:0.85rem;color:#94a3b8;'>ref: {slip_ref}</span>"
             )
             btn_text = "กลับหน้าหลัก"
             btn_link = "/"
         else:
+            ...
+
             print(f"[SLIP-FAIL] pkg={pkg} user={username} -> {verify_msg} ref={slip_ref}")
             try:
                 os.remove(save_path)
@@ -841,3 +849,4 @@ def next_sheet():
 if __name__ == "__main__":
     # ✅ Production: รันด้วย gunicorn แทน (เช่น gunicorn app:app)
     app.run(host="0.0.0.0", port=5000, debug=False)
+
