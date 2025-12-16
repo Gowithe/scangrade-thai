@@ -169,6 +169,81 @@ def end_action_lock(action_name: str):
     session["_action_locks"] = locks
 
 
+# -------------------------
+# Minimal file cleanup (uploads/slips)
+# -------------------------
+def cleanup_old_files(folder: str, max_age_sec: int, min_age_sec: int = 180, exts=None, max_delete: int = 200):
+    """
+    ลบไฟล์ที่เก่ากว่า max_age_sec แต่จะไม่ลบไฟล์ที่อายุน้อยกว่า min_age_sec (กันลบไฟล์ที่เพิ่งสร้าง/กำลังใช้)
+    - exts: set ของนามสกุลที่อนุญาตให้ลบ เช่น {".jpg",".jpeg",".png",".webp"}
+    - max_delete: จำกัดจำนวนไฟล์ที่ลบต่อครั้ง กัน loop นาน
+    """
+    try:
+        if not os.path.isdir(folder):
+            return 0
+
+        now = time.time()
+        deleted = 0
+
+        for fname in os.listdir(folder):
+            if deleted >= max_delete:
+                break
+
+            path = os.path.join(folder, fname)
+            if not os.path.isfile(path):
+                continue
+
+            if exts:
+                ext = os.path.splitext(fname.lower())[1]
+                if ext not in exts:
+                    continue
+
+            try:
+                age = now - os.path.getmtime(path)
+                if age < min_age_sec:
+                    continue
+                if age > max_age_sec:
+                    os.remove(path)
+                    deleted += 1
+            except Exception:
+                pass
+
+        return deleted
+    except Exception:
+        return 0
+
+
+def maybe_cleanup():
+    """
+    Minimal: รัน cleanup แบบสุ่ม 10% ของ request
+    """
+    try:
+        if random.random() > 0.10:
+            return
+
+        os.makedirs("uploads", exist_ok=True)
+        os.makedirs("slips", exist_ok=True)
+
+        cleanup_old_files(
+            folder="uploads",
+            max_age_sec=int(os.getenv("UPLOADS_TTL_SEC", str(6 * 3600))),   # 6 ชม.
+            min_age_sec=int(os.getenv("UPLOADS_MIN_AGE_SEC", "180")),      # 3 นาที
+            exts={".jpg", ".jpeg", ".png", ".webp"},
+            max_delete=200
+        )
+
+        cleanup_old_files(
+            folder="slips",
+            max_age_sec=int(os.getenv("SLIPS_TTL_SEC", str(72 * 3600))),    # 72 ชม.
+            min_age_sec=int(os.getenv("SLIPS_MIN_AGE_SEC", "300")),        # 5 นาที
+            exts={".jpg", ".jpeg", ".png", ".webp"},
+            max_delete=200
+        )
+
+    except Exception:
+        pass
+
+
 # ✅ per-session manual upload helpers
 def _ensure_upload_dir():
     os.makedirs("uploads", exist_ok=True)
@@ -533,6 +608,9 @@ def buy_credits():
     if resp:
         return resp
 
+    # ✅ minimal cleanup (สุ่ม 10%)
+    maybe_cleanup()
+
     os.makedirs("slips", exist_ok=True)
 
     if request.method == "POST":
@@ -718,6 +796,9 @@ def auto_grade():
     if user["credits"] <= 0:
         return redirect("/buy")
 
+    # ✅ minimal cleanup (สุ่ม 10%)
+    maybe_cleanup()
+
     # ✅ กันกดซ้ำ
     if not start_action_lock("auto_grade", ttl_sec=45):
         session["warp_fail_message"] = "⏳ ระบบกำลังตรวจอยู่ กรุณารอสักครู่ (อย่ากดซ้ำ)"
@@ -795,6 +876,9 @@ def select_corners():
     if resp:
         return resp
 
+    # ✅ minimal cleanup (สุ่ม 10%)
+    maybe_cleanup()
+
     file = request.files.get("sheet")
     if not file or file.filename == "":
         session["warp_fail_message"] = "❌ กรุณาเลือกรูปกระดาษคำตอบก่อน"
@@ -848,6 +932,9 @@ def grade():
         return resp
     if user["credits"] <= 0:
         return redirect("/buy")
+
+    # ✅ minimal cleanup (สุ่ม 10%)
+    maybe_cleanup()
 
     # ✅ กันกดซ้ำ (manual)
     if not start_action_lock("manual_grade", ttl_sec=45):
