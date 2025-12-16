@@ -1,5 +1,6 @@
 # app.py
 from flask import Flask, render_template, request, redirect, session, send_from_directory, jsonify
+from werkzeug.exceptions import RequestEntityTooLarge
 import cv2
 import numpy as np
 import base64
@@ -23,6 +24,67 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "SECRET_KEY_MISSING")
 
 # -------------------------
+# Upload safety (✅ #1)
+# -------------------------
+# จำกัดขนาดไฟล์อัปโหลดทั้งหมด (sheet + slip) แนะนำ 8MB
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "8")) * 1024 * 1024
+
+ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(e):
+    # ส่งข้อความที่อ่านรู้เรื่องแทน Internal Server Error
+    return (
+        "<h3>ไฟล์ใหญ่เกินไป</h3>"
+        "<p>กรุณาอัปโหลดรูปขนาดไม่เกิน "
+        + str(int(os.getenv("MAX_UPLOAD_MB", "8")))
+        + "MB</p>"
+        "<p>แนะนำ: ปิดโหมด 48MP / เลือกภาพขนาดปกติ / ส่งเป็น JPEG</p>"
+        "<a href='/'>กลับหน้าหลัก</a>",
+        413,
+    )
+
+
+def is_allowed_image_filename(filename: str) -> bool:
+    if not filename:
+        return False
+    ext = os.path.splitext(filename.lower())[1]
+    return ext in ALLOWED_IMAGE_EXTS
+
+
+def read_image_from_filestorage(file_storage):
+    """
+    อ่านรูปจาก Flask FileStorage แบบปลอดภัย
+    คืนค่า: img (BGR) หรือ None
+    """
+    try:
+        data = file_storage.read()
+        file_storage.stream.seek(0)  # รีเซ็ต pointer เผื่อโค้ดอื่นอ่านต่อ
+        if not data:
+            return None
+        arr = np.frombuffer(data, np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        return img
+    except Exception:
+        return None
+
+
+def downscale_image(img, max_side=2000):
+    """
+    ลดขนาดรูปก่อนประมวลผล เพื่อให้เร็วขึ้น/นิ่งขึ้น
+    """
+    try:
+        h, w = img.shape[:2]
+        if max(h, w) > max_side:
+            scale = max_side / float(max(h, w))
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        return img
+    except Exception:
+        return img
+
+
+# -------------------------
 # Config
 # -------------------------
 COOKIE_SECURE = (os.getenv("COOKIE_SECURE", "0") == "1")
@@ -38,7 +100,6 @@ EASYSLIP_VERIFY_URL = os.getenv("EASYSLIP_VERIFY_URL", "https://developer.easysl
 
 # Init DB
 db.init_db()
-
 
 # -------------------------
 # Helpers
@@ -56,7 +117,6 @@ def ensure_logged_in():
         return None, None, redirect("/login")
     user = db.get_user(username)
     if not user:
-        # session อาจค้าง แต่ user ไม่มีใน DB แล้ว
         session.pop("username", None)
         return None, None, redirect("/login")
     return username, user, None
@@ -80,7 +140,7 @@ def _norm_name(s: str) -> str:
     return s
 
 
-# ✅ NEW: per-session manual upload helpers
+# ✅ per-session manual upload helpers
 def _ensure_upload_dir():
     os.makedirs("uploads", exist_ok=True)
 
@@ -96,6 +156,7 @@ def normalize_slip_to_jpg(upload_file, max_width=1600, jpeg_quality=92):
     คืนค่า: (ok, message, jpg_bytes)
     """
     raw = upload_file.read()
+    upload_file.stream.seek(0)
     if not raw:
         return False, "ไฟล์ว่างเปล่า", None
 
@@ -119,10 +180,6 @@ def verify_slip_with_easyslip(file_path: str, expected_amount: float):
     """
     ตรวจสลิปกับ EasySlip
     คืนค่า: (is_valid, message, slip_ref, paid_amount)
-
-    - slip_ref ใช้กันซ้ำ (transRef)
-    - ตรวจจำนวนเงิน
-    - ตรวจผู้รับเงิน (ชื่อ/เลขบัญชี last4/proxy last4)
     """
     if not SLIP_API_KEY:
         return False, "SLIP_API_KEY ไม่ถูกตั้งค่าใน .env", None, None
@@ -153,7 +210,6 @@ def verify_slip_with_easyslip(file_path: str, expected_amount: float):
 
     data = js.get("data") or {}
 
-    # ---- slip_ref ----
     slip_ref = (
         data.get("transRef")
         or data.get("transRefId")
@@ -166,7 +222,6 @@ def verify_slip_with_easyslip(file_path: str, expected_amount: float):
     if not slip_ref:
         return False, "ตรวจสลิปได้ แต่ไม่พบรหัสธุรกรรม (transRef) เพื่อกันสลิปซ้ำ", None, None
 
-    # ---- amount ----
     paid_amount = None
     amt_obj = data.get("amount")
     if isinstance(amt_obj, dict):
@@ -184,9 +239,6 @@ def verify_slip_with_easyslip(file_path: str, expected_amount: float):
     if float(paid_amount) != float(expected_amount):
         return False, f"ยอดเงินไม่ตรงแพ็ก (สลิป {paid_amount} บาท, ต้องเป็น {expected_amount} บาท)", slip_ref, paid_amount
 
-    # -----------------------------
-    # ✅ ตรวจผู้รับเงิน (ยืดหยุ่น: ผ่านได้ถ้าตรงอย่างใดอย่างหนึ่ง)
-    # -----------------------------
     expected_name_th = (os.getenv("EXPECTED_RECEIVER_NAME_TH") or "").strip()
     expected_name_en = (os.getenv("EXPECTED_RECEIVER_NAME_EN") or "").strip()
     expected_bank_last4 = (os.getenv("EXPECTED_BANK_ACCOUNT_LAST4") or "").strip()
@@ -195,7 +247,6 @@ def verify_slip_with_easyslip(file_path: str, expected_amount: float):
     receiver = data.get("receiver") or {}
     acc = receiver.get("account") or {}
 
-    # name
     name_obj = acc.get("name") or {}
     receiver_name_th = ""
     receiver_name_en = ""
@@ -205,7 +256,6 @@ def verify_slip_with_easyslip(file_path: str, expected_amount: float):
     else:
         receiver_name_th = str(name_obj).strip()
 
-    # bank/proxy
     bank_obj = acc.get("bank") or {}
     proxy_obj = acc.get("proxy") or {}
 
@@ -340,7 +390,6 @@ def verify():
 def logout():
     session.pop("username", None)
 
-    # ✅ cleanup manual file (ถ้าค้างอยู่)
     manual_path = session.pop("manual_upload_path", None)
     try:
         if manual_path and os.path.exists(manual_path):
@@ -467,6 +516,8 @@ def buy_credits():
             return "แพ็กเกจไม่ถูกต้อง", 400
         if not slip or slip.filename == "":
             return "กรุณาอัปโหลดสลิป", 400
+        if not is_allowed_image_filename(slip.filename):
+            return "รองรับสลิปเป็นรูป .jpg .jpeg .png .webp เท่านั้น", 400
 
         expected_price = float(db.PACKAGES[pkg]["price"])
 
@@ -483,7 +534,6 @@ def buy_credits():
             save_path, expected_amount=expected_price
         )
 
-        # UI defaults
         status_title = "⏳ กำลังตรวจสอบ..."
         status_color = "#f59e0b"
         status_icon = "⏳"
@@ -497,37 +547,37 @@ def buy_credits():
 
         order_id = None
         pkg_info = db.PACKAGES[pkg]
-        
+
         if is_valid:
             try:
                 order_id = db.create_order(username, pkg, safe_name, slip_ref)  # <-- int
             except ValueError:
                 is_valid = False
                 verify_msg = "สลิปนี้ถูกใช้ไปแล้ว (ระบบป้องกันการใช้ซ้ำ)"
-        
+
         if is_valid and order_id:
             print(f"[AUTO-APPROVE] Order #{order_id} Verified! slip_ref={slip_ref}")
-        
-            order_row, user_row = db.approve_order_and_add_credits(order_id)
-            # user_row = {"username":..., "credits": new_credits}
-        
-            new_credits = user_row["credits"]
-        
-            status_title = "✅ เติมเครดิตสำเร็จ!"
-            status_color = "#10b981"
-            status_icon = "🎉"
-            status_desc = (
-                f"ระบบตรวจสอบเรียบร้อย<br>"
-                f"ยอดเงิน: <b>{paid_amount}</b> บาท<br>"
-                f"คุณได้รับเครดิตเพิ่ม <b>{pkg_info['credits']}</b> ครั้ง<br>"
-                f"เครดิตรวม: <b>{new_credits}</b><br>"
-                f"<span style='font-size:0.85rem;color:#94a3b8;'>ref: {slip_ref}</span>"
-            )
-            btn_text = "กลับหน้าหลัก"
-            btn_link = "/"
-        else:
-            ...
 
+            order_row, user_row = db.approve_order_and_add_credits(order_id)
+            if not user_row:
+                is_valid = False
+                verify_msg = "เติมเครดิตไม่สำเร็จ (ไม่พบผู้ใช้ในระบบ)"
+            else:
+                new_credits = user_row["credits"]
+
+                status_title = "✅ เติมเครดิตสำเร็จ!"
+                status_color = "#10b981"
+                status_icon = "🎉"
+                status_desc = (
+                    f"ระบบตรวจสอบเรียบร้อย<br>"
+                    f"ยอดเงิน: <b>{paid_amount}</b> บาท<br>"
+                    f"คุณได้รับเครดิตเพิ่ม <b>{pkg_info['credits']}</b> ครั้ง<br>"
+                    f"เครดิตรวม: <b>{new_credits}</b><br>"
+                    f"<span style='font-size:0.85rem;color:#94a3b8;'>ref: {slip_ref}</span>"
+                )
+                btn_text = "กลับหน้าหลัก"
+                btn_link = "/"
+        if not is_valid:
             print(f"[SLIP-FAIL] pkg={pkg} user={username} -> {verify_msg} ref={slip_ref}")
             try:
                 os.remove(save_path)
@@ -610,7 +660,6 @@ def buy_credits():
         """
         return html
 
-    # GET
     return render_template(
         "buy.html",
         username=username,
@@ -632,8 +681,12 @@ def auto_grade():
         return redirect("/buy")
 
     file = request.files.get("sheet")
-    if not file:
+    if not file or file.filename == "":
         session["warp_fail_message"] = "❌ กรุณาเลือกรูปกระดาษคำตอบก่อน"
+        return redirect("/")
+
+    if not is_allowed_image_filename(file.filename):
+        session["warp_fail_message"] = "❌ รองรับเฉพาะไฟล์รูป .jpg .jpeg .png .webp"
         return redirect("/")
 
     num_questions = int(request.form.get("num_questions", "60"))
@@ -644,14 +697,14 @@ def auto_grade():
     session["last_subject"] = subject
     session["last_num_questions"] = num_questions
 
-    raw = file.read()
-    img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    img = read_image_from_filestorage(file)
     if img is None:
         session["warp_fail_message"] = "❌ ไม่สามารถอ่านไฟล์รูปได้ (ไฟล์เสียหรือไม่รองรับ) กรุณาลองถ่าย/เลือกใหม่"
         return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
-    warped = utils.auto_detect_and_warp(img)
+    img = downscale_image(img, max_side=2000)
 
+    warped = utils.auto_detect_and_warp(img)
     if warped is None:
         session["warp_fail_message"] = (
             "❌ ระบบไม่สามารถตรวจจับมุมกระดาษคำตอบได้<br><br>"
@@ -696,8 +749,12 @@ def select_corners():
         return resp
 
     file = request.files.get("sheet")
-    if not file:
+    if not file or file.filename == "":
         session["warp_fail_message"] = "❌ กรุณาเลือกรูปกระดาษคำตอบก่อน"
+        return redirect("/")
+
+    if not is_allowed_image_filename(file.filename):
+        session["warp_fail_message"] = "❌ รองรับเฉพาะไฟล์รูป .jpg .jpeg .png .webp"
         return redirect("/")
 
     num_questions = int(request.form.get("num_questions", "60"))
@@ -708,13 +765,13 @@ def select_corners():
     session["last_subject"] = subject
     session["last_num_questions"] = num_questions
 
-    raw = file.read()
-    img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    img = read_image_from_filestorage(file)
     if img is None:
         session["warp_fail_message"] = "❌ ไม่สามารถอ่านไฟล์รูปได้ กรุณาลองถ่าย/เลือกใหม่"
         return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
-    # ✅ per-session manual image path (ไม่ชนกัน)
+    img = downscale_image(img, max_side=2400)
+
     old_path = session.get("manual_upload_path")
     if old_path and os.path.exists(old_path):
         try:
@@ -781,7 +838,6 @@ def grade():
 
     db.set_user_credits(username, user["credits"] - 1)
 
-    # ✅ cleanup manual file after success
     try:
         if manual_path and os.path.exists(manual_path):
             os.remove(manual_path)
@@ -821,12 +877,12 @@ def admin_orders():
 def admin_approve(order_id):
     if request.args.get("key") != ADMIN_KEY:
         return "Unauthorized", 403
-    order, user, _ = db.approve_order_and_add_credits(order_id)
-    if not order:
+    order_row, user_row = db.approve_order_and_add_credits(order_id)
+    if not order_row:
         return "Not Found", 404
-    if not user:
+    if not user_row:
         return f"Approved (or already approved) but user not found for order #{order_id}", 200
-    return f"Approved! User {user['username']} now has {user['credits']} credits."
+    return f"Approved! User {user_row['username']} now has {user_row['credits']} credits."
 
 
 @app.route("/next", methods=["POST"])
@@ -849,4 +905,3 @@ def next_sheet():
 if __name__ == "__main__":
     # ✅ Production: รันด้วย gunicorn แทน (เช่น gunicorn app:app)
     app.run(host="0.0.0.0", port=5000, debug=False)
-
