@@ -212,6 +212,7 @@
       transition: transform 0.2s;
     }
     .btn-save:active { transform: scale(0.98); }
+    .btn-save:disabled{ opacity:.65; cursor:not-allowed; }
 
     .hint {
       font-size: 0.8rem;
@@ -279,6 +280,7 @@
       gap: 8px;
     }
     .btn-main:active { transform: scale(0.96); }
+    .btn-main:disabled{ opacity:.65; cursor:not-allowed; box-shadow:none; }
 
     .btn-auto {
       background: linear-gradient(135deg, #10b981, #059669);
@@ -315,7 +317,6 @@
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 
-    /* ✅ Warp Fail Modal */
     .modal-backdrop{
       display:none;
       position:fixed;
@@ -391,7 +392,7 @@
     </div>
 
     <div class="card">
-      <form method="post" enctype="multipart/form-data">
+      <form method="post" enctype="multipart/form-data" id="mainForm">
         <input type="file" id="fileInput" name="sheet" accept="image/*" style="display:none;" required>
 
         <div class="section-label">📷 1. เลือกรูปกระดาษคำตอบ</div>
@@ -414,7 +415,6 @@
         </div>
         <input type="hidden" name="num_questions" id="numQuestionsInput" value="{{ num_questions|default(60) }}">
 
-        <!-- ✅ Subject + Saved keys -->
         <div class="section-label">📚 3. วิชา / ชุดข้อสอบ (บันทึกเฉลยได้)</div>
 
         <div class="row-2">
@@ -456,10 +456,10 @@
 
         <div class="section-label">🚀 5. เริ่มตรวจ</div>
         <div class="action-group">
-          <button type="submit" formaction="/auto_grade" class="btn-main btn-auto">
+          <button type="submit" formaction="/auto_grade" class="btn-main btn-auto" id="btnAuto">
             <span>⚡</span> ตรวจอัตโนมัติ
           </button>
-          <button type="submit" formaction="/select" class="btn-main btn-manual">
+          <button type="submit" formaction="/select" class="btn-main btn-manual" id="btnManual">
             <span>🖐️</span> ตรวจ Manual
           </button>
         </div>
@@ -471,10 +471,8 @@
     </div>
   </div>
 
-  <!-- ✅ Toast -->
   <div id="toast" class="toast">...</div>
 
-  <!-- ✅ Warp Fail Modal -->
   <div id="warpFailModal" class="modal-backdrop">
     <div class="modal-card">
       <div class="modal-title">⚠️ ตรวจจับมุมไม่ได้</div>
@@ -504,13 +502,17 @@
   const subjectSelect = document.getElementById('subjectSelect');
   const btnLoadKey = document.getElementById('btnLoadKey');
 
+  const btnSaveKey = document.getElementById("btnSaveKey");
+  const btnAuto = document.getElementById("btnAuto");
+  const btnManual = document.getElementById("btnManual");
+  const mainForm = document.getElementById("mainForm");
+
   const toast = document.getElementById('toast');
 
   const initialNumQ = {{ num_questions|default(60) }};
   const initialAnswer = "{{ answer_key_str|default('') }}";
   const initialSubject = "{{ selected_subject|default('') }}";
 
-  // ✅ Warp message from server (มีตัวเดียวพอ)
   const warpFailMsg = `{{ warp_fail_message|default('')|safe }}`;
 
   function showToast(msg) {
@@ -650,7 +652,6 @@
     loadKeyBySubject(subjectInput.value);
   });
 
-  // ✅ Modal helpers
   function openWarpFailModal(htmlMsg) {
     const modal = document.getElementById("warpFailModal");
     const txt = document.getElementById("warpFailText");
@@ -673,6 +674,40 @@
     if (e.target.id === "warpFailModal") closeWarpFailModal();
   });
 
+  // ✅ กันกดซ้ำทุก action ในฟอร์มเดียว (save/auto/manual)
+  (function(){
+    if (!mainForm) return;
+
+    let submitted = false;
+    let clickedAction = null;
+
+    // จับว่ากดปุ่มไหน
+    [btnSaveKey, btnAuto, btnManual].forEach(btn => {
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        clickedAction = btn.getAttribute("formaction") || "submit";
+      });
+    });
+
+    mainForm.addEventListener("submit", () => {
+      if (submitted) return;
+      submitted = true;
+
+      // disable เฉพาะปุ่ม submit ทั้งหมด
+      const submitBtns = mainForm.querySelectorAll('button[type="submit"], input[type="submit"]');
+      submitBtns.forEach(b => b.disabled = true);
+
+      // ตั้งข้อความปุ่มตาม action
+      if (clickedAction === "/save_key" && btnSaveKey) {
+        btnSaveKey.textContent = "⏳ กำลังบันทึก...";
+      } else if (clickedAction === "/auto_grade" && btnAuto) {
+        btnAuto.textContent = "⏳ กำลังตรวจ...";
+      } else if (clickedAction === "/select" && btnManual) {
+        btnManual.textContent = "⏳ กำลังเปิดโหมด Manual...";
+      }
+    });
+  })();
+
   window.addEventListener('load', () => {
     answerInput.value = initialAnswer;
     subjectInput.value = initialSubject;
@@ -684,10 +719,11 @@
       loadKeyBySubject(subjectInput.value);
     }
 
-    // ✅ ถ้า warp fail -> toast + modal (ไม่มี alert ซ้ำ)
     if (warpFailMsg && warpFailMsg.trim().length > 0) {
       showToast("ไม่สามารถตรวจจับมุมได้ ❌ (ดูคำแนะนำ)");
       setTimeout(() => openWarpFailModal(warpFailMsg), 150);
     }
   });
 </script>
+</body>
+</html>
