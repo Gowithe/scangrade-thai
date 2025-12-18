@@ -6,8 +6,7 @@ from datetime import datetime
 # =========================
 # DB PATH (Render-friendly)
 # =========================
-# Render แนะนำให้ใช้ disk mount เช่น /var/data
-# ตั้งค่าใน Render -> Environment: DB_PATH=/var/data/scangrade.db
+# ตั้งใน Render → Environment: DB_PATH=/var/data/scangrade.db
 DB_PATH = os.environ.get("DB_PATH", "scangrade.db")
 
 
@@ -26,16 +25,14 @@ PACKAGES = {
 # DB CONNECTION
 # =========================
 def get_db_connection():
-    # สร้างโฟลเดอร์ก่อน (กัน path ไม่อยู่ เช่น /var/data/xxx.db)
+    # สร้างโฟลเดอร์อัตโนมัติ (กัน path ไม่อยู่)
     db_dir = os.path.dirname(DB_PATH)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
 
-    # timeout กัน "database is locked" เวลาโหลดพร้อมกัน
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
 
-    # เพิ่มความเสถียรสำหรับงานหลาย request
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
@@ -81,13 +78,12 @@ def init_db():
         )
     """)
 
-    # กัน slip ซ้ำ
     cur.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_slip_ref_unique
         ON orders(slip_ref)
     """)
 
-    # DEVICES (free trial)
+    # DEVICES (Free trial)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS devices (
             device_id TEXT PRIMARY KEY,
@@ -155,15 +151,65 @@ def set_user_credits(username, new_credits):
     conn.close()
 
 
-def list_users(limit=500, offset=0):
-    """สำหรับหน้า Admin Dashboard"""
+def adjust_user_credits(username, delta):
+    """เพิ่ม/ลดเครดิต (ไม่ให้ติดลบ)"""
+    now = datetime.utcnow().isoformat()
     conn = get_db_connection()
-    rows = conn.execute("""
+    conn.isolation_level = None
+    try:
+        conn.execute("BEGIN")
+        row = conn.execute(
+            "SELECT credits FROM users WHERE username = ?",
+            (username,)
+        ).fetchone()
+        if not row:
+            conn.execute("ROLLBACK")
+            return None
+
+        current = int(row["credits"])
+        new_credits = current + int(delta)
+        if new_credits < 0:
+            new_credits = 0
+
+        conn.execute("""
+            UPDATE users SET credits = ?, updated_at = ?
+            WHERE username = ?
+        """, (new_credits, now, username))
+
+        conn.execute("COMMIT")
+        return new_credits
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
+
+
+def list_users(q="", sort="updated_at", direction="desc", limit=1000, offset=0):
+    q = (q or "").strip().lower()
+
+    allowed_sort = {"username", "credits", "created_at", "updated_at", "used_free"}
+    sort = sort if sort in allowed_sort else "updated_at"
+    direction = "asc" if (direction or "").lower() == "asc" else "desc"
+
+    where = ""
+    params = []
+
+    if q:
+        where = "WHERE lower(username) LIKE ?"
+        params.append(f"%{q}%")
+
+    sql = f"""
         SELECT username, credits, used_free, created_at, updated_at
         FROM users
-        ORDER BY updated_at DESC
+        {where}
+        ORDER BY {sort} {direction}
         LIMIT ? OFFSET ?
-    """, (int(limit), int(offset))).fetchall()
+    """
+    params.extend([int(limit), int(offset)])
+
+    conn = get_db_connection()
+    rows = conn.execute(sql, tuple(params)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -260,7 +306,6 @@ def create_order(username, pkg_key, slip_filename, slip_ref):
 def approve_order_and_add_credits(order_id):
     conn = get_db_connection()
     conn.isolation_level = None
-
     try:
         conn.execute("BEGIN")
 
@@ -294,17 +339,15 @@ def approve_order_and_add_credits(order_id):
         """, (now, order_id))
 
         conn.execute("COMMIT")
-        conn.close()
-
         return dict(order), {
             "username": user["username"],
             "credits": new_credits
         }
-
     except Exception:
         conn.execute("ROLLBACK")
-        conn.close()
         raise
+    finally:
+        conn.close()
 
 
 # =========================
