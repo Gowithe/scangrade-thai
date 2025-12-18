@@ -13,13 +13,15 @@ import re
 from dotenv import load_dotenv
 
 # Import modules
-import db
 import utils
 import omr60
 import omr80
 import os
-from flask import request, abort, render_template
+import csv
+import io
+from flask import request, abort, render_template, redirect, Response
 import db
+
 
 load_dotenv()
 
@@ -1049,18 +1051,81 @@ def next_sheet():
 
     return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
+import os
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 
 def require_admin():
     token = request.args.get("token", "")
     if not ADMIN_TOKEN or token != ADMIN_TOKEN:
         abort(403)
+    return token
 
 @app.route("/admin/users")
 def admin_users():
-    require_admin()
-    users = db.list_users(limit=1000)
-    return render_template("admin_users.html", users=users)
+    token = require_admin()
+    q = request.args.get("q", "")
+    sort = request.args.get("sort", "updated_at")
+    direction = request.args.get("dir", "desc")
+
+    users = db.list_users(q=q, sort=sort, direction=direction, limit=1000)
+    return render_template(
+        "admin_users.html",
+        users=users,
+        token=token,
+        q=q,
+        sort=sort,
+        direction=direction
+    )
+
+@app.route("/admin/users.csv")
+def admin_users_csv():
+    token = require_admin()
+    q = request.args.get("q", "")
+    sort = request.args.get("sort", "updated_at")
+    direction = request.args.get("dir", "desc")
+
+    users = db.list_users(q=q, sort=sort, direction=direction, limit=5000)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["username", "credits", "used_free", "created_at", "updated_at"])
+    for u in users:
+        writer.writerow([u["username"], u["credits"], u["used_free"], u["created_at"], u["updated_at"]])
+
+    csv_text = output.getvalue()
+    output.close()
+
+    filename = "users_export.csv"
+    return Response(
+        csv_text,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@app.route("/admin/users/credits", methods=["POST"])
+def admin_adjust_credits():
+    # token ส่งมาใน query string เพื่อ reuse ระบบเดิม
+    token = require_admin()
+
+    username = request.form.get("username", "").strip()
+    delta_str = request.form.get("delta", "").strip()
+
+    # กัน input พัง
+    try:
+        delta = int(delta_str)
+    except Exception:
+        delta = 0
+
+    if not username or delta == 0:
+        return redirect(f"/admin/users?token={token}")
+
+    db.adjust_user_credits(username, delta)
+
+    # กลับไปหน้าเดิมพร้อม filter เดิม
+    q = request.args.get("q", "")
+    sort = request.args.get("sort", "updated_at")
+    direction = request.args.get("dir", "desc")
+    return redirect(f"/admin/users?token={token}&q={q}&sort={sort}&dir={direction}")
 
 
 if __name__ == "__main__":
