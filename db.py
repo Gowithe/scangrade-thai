@@ -1,9 +1,15 @@
 # db.py
+import os
 import sqlite3
 from datetime import datetime
 
-import os
-DB_PATH = os.getenv("DB_PATH", "/var/data/scangrade.db")
+# =========================
+# DB PATH (Render-friendly)
+# =========================
+# Render แนะนำให้ใช้ disk mount เช่น /var/data
+# ตั้งค่าใน Render -> Environment: DB_PATH=/var/data/scangrade.db
+DB_PATH = os.environ.get("DB_PATH", "scangrade.db")
+
 
 # =========================
 # PACKAGES
@@ -15,12 +21,28 @@ PACKAGES = {
     "1000 ครั้ง": {"credits": 1000, "price": 299},
 }
 
+
 # =========================
 # DB CONNECTION
 # =========================
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
+    # สร้างโฟลเดอร์ก่อน (กัน path ไม่อยู่ เช่น /var/data/xxx.db)
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+    # timeout กัน "database is locked" เวลาโหลดพร้อมกัน
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+
+    # เพิ่มความเสถียรสำหรับงานหลาย request
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+    except Exception:
+        pass
+
     return conn
 
 
@@ -131,6 +153,19 @@ def set_user_credits(username, new_credits):
     """, (int(new_credits), now, username))
     conn.commit()
     conn.close()
+
+
+def list_users(limit=500, offset=0):
+    """สำหรับหน้า Admin Dashboard"""
+    conn = get_db_connection()
+    rows = conn.execute("""
+        SELECT username, credits, used_free, created_at, updated_at
+        FROM users
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?
+    """, (int(limit), int(offset))).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # =========================
@@ -309,4 +344,3 @@ def list_saved_subjects(username, num_questions):
     """, (username, num_questions)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
-
