@@ -17,8 +17,9 @@ import db
 import utils
 import omr60
 import omr80
-import sys
-print("[RUNTIME] python =", sys.version)
+import os
+from flask import request, abort, render_template
+import db
 
 load_dotenv()
 
@@ -789,14 +790,17 @@ def buy_credits():
         payment_qr_image=os.getenv("PAYMENT_QR_IMAGE", ""),
     )
 
+
 @app.route("/auto_grade", methods=["POST"])
 def auto_grade():
     username, user, resp = ensure_logged_in()
     if resp:
         return resp
-
     if user["credits"] <= 0:
         return redirect("/buy")
+
+    # ✅ minimal cleanup (สุ่ม 10%)
+    maybe_cleanup()
 
     # ✅ กันกดซ้ำ
     if not start_action_lock("auto_grade", ttl_sec=45):
@@ -821,32 +825,22 @@ def auto_grade():
         session["last_subject"] = subject
         session["last_num_questions"] = num_questions
 
-        # -------------------------
-        # ⏱ PERF TIMING
-        # -------------------------
-        t0 = time.time()
-
         img = read_image_from_filestorage(file)
-        t1 = time.time()
-
         if img is None:
-            session["warp_fail_message"] = "❌ ไม่สามารถอ่านไฟล์รูปได้ (ไฟล์เสียหรือไม่รองรับ)"
+            session["warp_fail_message"] = "❌ ไม่สามารถอ่านไฟล์รูปได้ (ไฟล์เสียหรือไม่รองรับ) กรุณาลองถ่าย/เลือกใหม่"
             return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
-        img = downscale_image(img, max_side=1600)
-        t2 = time.time()
+        img = downscale_image(img, max_side=2000)
 
         warped = utils.auto_detect_and_warp(img)
-        t3 = time.time()
-
         if warped is None:
             session["warp_fail_message"] = (
                 "❌ ระบบไม่สามารถตรวจจับมุมกระดาษคำตอบได้<br><br>"
                 "💡 คำแนะนำ:<br>"
                 "- ถ่ายในที่แสงสว่างเพียงพอ<br>"
                 "- ให้เห็นกระดาษทั้ง 4 มุมชัดเจน<br>"
-                "- วางกระดาษบนพื้นหลังเรียบ<br><br>"
-                "หรือเลือก <b>โหมด Manual</b>"
+                "- วางกระดาษบนพื้นหลังเรียบ/ตัดของรกออก<br><br>"
+                "หรือเลือก <b>โหมด Manual</b> เพื่อกำหนดมุมเอง"
             )
             return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
@@ -857,24 +851,10 @@ def auto_grade():
             session["warp_fail_message"] = f"❌ ตรวจไม่สำเร็จ: {e}"
             return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
-        t4 = time.time()
+        db.set_user_credits(username, user["credits"] - 1)
 
-        debug_img = downscale_image(debug_img, max_side=1200)
         _, buf = cv2.imencode(".jpg", debug_img)
         debug_b64 = base64.b64encode(buf).decode("utf-8")
-        t5 = time.time()
-
-        print(
-            f"[PERF] read={t1-t0:.2f}s "
-            f"resize={t2-t1:.2f}s "
-            f"warp={t3-t2:.2f}s "
-            f"omr={t4-t3:.2f}s "
-            f"encode={t5-t4:.2f}s "
-            f"total={t5-t0:.2f}s"
-        )
-
-        # ใช้เครดิต
-        db.set_user_credits(username, user["credits"] - 1)
 
         return render_template(
             "result.html",
@@ -890,8 +870,8 @@ def auto_grade():
         )
 
     finally:
-        # ✅ ปลด lock เสมอ ไม่ว่าพังหรือสำเร็จ
         end_action_lock("auto_grade")
+
 
 @app.route("/select", methods=["POST"])
 def select_corners():
@@ -1069,10 +1049,20 @@ def next_sheet():
 
     return redirect(f"/?num_questions={num_questions}&subject={subject}" if subject else f"/?num_questions={num_questions}")
 
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+
+def require_admin():
+    token = request.args.get("token", "")
+    if not ADMIN_TOKEN or token != ADMIN_TOKEN:
+        abort(403)
+
+@app.route("/admin/users")
+def admin_users():
+    require_admin()
+    users = db.list_users(limit=1000)
+    return render_template("admin_users.html", users=users)
+
 
 if __name__ == "__main__":
     # Production: รันด้วย gunicorn แทน (เช่น gunicorn app:app)
     app.run(host="0.0.0.0", port=5000, debug=False)
-
-
-
