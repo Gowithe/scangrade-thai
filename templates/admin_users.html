@@ -6,17 +6,47 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 8px; }
+    th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
     th { background: #f3f3f3; text-align: left; }
     .muted { color: #666; font-size: 12px; }
-    .top { display:flex; align-items:center; justify-content:space-between; }
+    .top { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    input[type="text"], input[type="number"] { padding:6px; }
+    button { padding:6px 10px; cursor:pointer; }
+    a { text-decoration:none; }
+    .pill { display:inline-block; padding:6px 10px; border:1px solid #ddd; border-radius:999px; background:#fff; }
+    .row-actions { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+    .small { font-size:12px; }
   </style>
 </head>
 <body>
   <div class="top">
-    <h2>Users Dashboard</h2>
-    <div class="muted">Total: {{ users|length }}</div>
+    <div>
+      <h2 style="margin:0;">Users Dashboard</h2>
+      <div class="muted">Showing: {{ users|length }} users</div>
+    </div>
+
+    <div class="controls">
+      <form method="get" action="/admin/users" class="controls">
+        <input type="hidden" name="token" value="{{ token }}">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search email/username...">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="dir" value="{{ direction }}">
+        <button type="submit">Search</button>
+        <a class="pill small" href="/admin/users?token={{ token }}">Clear</a>
+      </form>
+
+      <a class="pill small" href="/admin/users.csv?token={{ token }}&q={{ q }}&sort={{ sort }}&dir={{ direction }}">Export CSV</a>
+    </div>
   </div>
+
+  <p class="muted">
+    Sort:
+    <a href="/admin/users?token={{ token }}&q={{ q }}&sort=updated_at&dir={{ 'asc' if (sort=='updated_at' and direction=='desc') else 'desc' }}">Updated</a> |
+    <a href="/admin/users?token={{ token }}&q={{ q }}&sort=created_at&dir={{ 'asc' if (sort=='created_at' and direction=='desc') else 'desc' }}">Created</a> |
+    <a href="/admin/users?token={{ token }}&q={{ q }}&sort=credits&dir={{ 'asc' if (sort=='credits' and direction=='desc') else 'desc' }}">Credits</a> |
+    <a href="/admin/users?token={{ token }}&q={{ q }}&sort=username&dir={{ 'asc' if (sort=='username' and direction=='desc') else 'desc' }}">Username</a>
+  </p>
 
   <table>
     <thead>
@@ -27,6 +57,7 @@
         <th>Used Free</th>
         <th>Created</th>
         <th>Updated</th>
+        <th>Adjust Credits</th>
       </tr>
     </thead>
     <tbody>
@@ -34,10 +65,19 @@
       <tr>
         <td>{{ loop.index }}</td>
         <td>{{ u.username }}</td>
-        <td>{{ u.credits }}</td>
+        <td><b>{{ u.credits }}</b></td>
         <td>{{ u.used_free }}</td>
-        <td>{{ u.created_at }}</td>
-        <td>{{ u.updated_at }}</td>
+        <td class="small">{{ u.created_at }}</td>
+        <td class="small">{{ u.updated_at }}</td>
+        <td>
+          <form class="row-actions" method="post"
+                action="/admin/users/credits?token={{ token }}&q={{ q }}&sort={{ sort }}&dir={{ direction }}">
+            <input type="hidden" name="username" value="{{ u.username }}">
+            <input type="number" name="delta" value="10" step="1" style="width:90px;">
+            <button type="submit">Apply (+/-)</button>
+            <span class="muted small">ใส่เลขติดลบเพื่อลด เช่น -50</span>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
