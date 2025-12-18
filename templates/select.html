@@ -3,7 +3,11 @@ TEMPLATE_SELECT = """
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <title>ปรับมุมกระดาษ | ScanGrade</title>
+
+  <title>Scangrade – ระบบตรวจข้อสอบอัตโนมัติ</title>
+  <meta name="description"
+        content="Scangrade คือระบบตรวจข้อสอบอัตโนมัติ (OMR) สำหรับครูและโรงเรียน ตรวจเร็ว ประหยัดเวลา ใช้งานออนไลน์" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
   <style>
@@ -163,9 +167,16 @@ TEMPLATE_SELECT = """
   </style>
 </head>
 <body>
+
+  <!-- ✅ SEO H1 (ซ่อนไว้ ไม่กระทบ UI) -->
+  <h1 style="position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden;">
+    Scangrade – ระบบตรวจข้อสอบอัตโนมัติ
+  </h1>
+
   <div class="container">
     <div class="header">
-      <h1 class="page-title">Manual Selection</h1>
+      <!-- ✅ เปลี่ยนจาก h1 เป็น h2 กัน H1 ซ้ำ -->
+      <h2 class="page-title">Manual Selection</h2>
     </div>
 
     <div class="card">
