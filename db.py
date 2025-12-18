@@ -14,7 +14,7 @@ DB_PATH = os.environ.get("DB_PATH", "scangrade.db")
 # PACKAGES
 # =========================
 PACKAGES = {
-    "300 ครั้ง": {"credits": 300, "price": 69},
+    "150 ครั้ง": {"credits": 150, "price": 69},
     "600 ครั้ง": {"credits": 600, "price": 99},
     "1000 ครั้ง": {"credits": 1000, "price": 199},
     "3000 ครั้ง": {"credits": 3000, "price": 299},
@@ -387,4 +387,5 @@ def list_saved_subjects(username, num_questions):
     """, (username, num_questions)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
 
