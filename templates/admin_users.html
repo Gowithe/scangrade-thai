@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Admin - Users</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background: #f3f3f3; text-align: left; }
+    .muted { color: #666; font-size: 12px; }
+    .top { display:flex; align-items:center; justify-content:space-between; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <h2>Users Dashboard</h2>
+    <div class="muted">Total: {{ users|length }}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Username (Email)</th>
+        <th>Credits</th>
+        <th>Used Free</th>
+        <th>Created</th>
+        <th>Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ u.username }}</td>
+        <td>{{ u.credits }}</td>
+        <td>{{ u.used_free }}</td>
+        <td>{{ u.created_at }}</td>
+        <td>{{ u.updated_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
