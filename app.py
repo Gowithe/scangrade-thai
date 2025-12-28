@@ -223,7 +223,7 @@ def maybe_cleanup():
     Minimal: รัน cleanup แบบสุ่ม 10% ของ request
     """
     try:
-        if random.random() > 0.10:
+        if random.random() > float(os.getenv("CLEANUP_PROB", "1.0")):
             return
 
         os.makedirs("uploads", exist_ok=True)
@@ -231,7 +231,7 @@ def maybe_cleanup():
 
         cleanup_old_files(
             folder="uploads",
-            max_age_sec=int(os.getenv("UPLOADS_TTL_SEC", str(6 * 3600))),   # 6 ชม.
+            max_age_sec=int(os.getenv("UPLOADS_TTL_SEC", os.getenv("MANUAL_FILE_TTL_SEC", "900"))),   # 6 ชม.
             min_age_sec=int(os.getenv("UPLOADS_MIN_AGE_SEC", "180")),      # 3 นาที
             exts={".jpg", ".jpeg", ".png", ".webp"},
             max_delete=200
@@ -920,6 +920,7 @@ def select_corners():
     cv2.imwrite(save_path, img)
     session["manual_upload_path"] = save_path
 
+    session["manual_upload_created_at"] = time.time()
     _, buf = cv2.imencode(".jpg", img)
     return render_template(
         "select.html",
@@ -951,6 +952,20 @@ def grade():
         if not manual_path or not os.path.exists(manual_path):
             session["warp_fail_message"] = "❌ ไม่พบรูปสำหรับ Manual (กรุณาอัปโหลดใหม่)"
             return redirect("/")
+        created_at = session.get("manual_upload_created_at")
+        ttl_sec = int(os.getenv("MANUAL_FILE_TTL_SEC", "900"))
+        if created_at and (time.time() - float(created_at)) > ttl_sec:
+            # ไฟล์เก่าเกินไป ลบทิ้งเพื่อความเป็นส่วนตัว
+            try:
+                if manual_path and os.path.exists(manual_path):
+                    os.remove(manual_path)
+            except Exception:
+                pass
+            session.pop("manual_upload_path", None)
+            session.pop("manual_upload_created_at", None)
+            session["warp_fail_message"] = "⏳ รูปหมดอายุแล้ว (ระบบลบทิ้งอัตโนมัติ) กรุณาอัปโหลดใหม่"
+            return redirect("/")
+
 
         points_str = request.form.get("points", "")
         if not points_str:
@@ -984,14 +999,6 @@ def grade():
 
         db.set_user_credits(username, user["credits"] - 1)
 
-        # ✅ cleanup manual file after success
-        try:
-            if manual_path and os.path.exists(manual_path):
-                os.remove(manual_path)
-        except Exception:
-            pass
-        session.pop("manual_upload_path", None)
-
         _, buf = cv2.imencode(".jpg", debug_img)
         return render_template(
             "result.html",
@@ -1007,6 +1014,15 @@ def grade():
         )
 
     finally:
+        # ✅ ลบทิ้งอัตโนมัติทุกกรณี (สำเร็จ/ไม่สำเร็จ)
+        try:
+            manual_path = session.get("manual_upload_path")
+            if manual_path and os.path.exists(manual_path):
+                os.remove(manual_path)
+        except Exception:
+            pass
+        session.pop("manual_upload_path", None)
+        session.pop("manual_upload_created_at", None)
         end_action_lock("manual_grade")
 
 
